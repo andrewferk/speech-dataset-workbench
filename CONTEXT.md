@@ -65,9 +65,11 @@ In v0.1 kept Recordings map 1:1 to Samples.
 _Avoid_: Row, example, item, recording (distinct — see above).
 
 **Dataset**:
-The complete collection managed by one workbench directory. There is exactly **one Dataset per
-workbench** — the workbench *is* the Dataset — so it carries no user-assigned name.
+The complete collection defined by one input set. The tool is a stateless transform with no
+managed workbench directory: a Dataset is exactly the contents of one `--data-in`, transformed
+into `--data-out`. There is **one Dataset per input set**, and it carries no user-assigned name.
 _Avoid_: Corpus, collection, project.
+_See_: ADR-0002 (stateless `--data-in`/`--data-out`).
 
 **Dataset Version**:
 An immutable snapshot produced by a build: a fixed set of Samples, their split assignment, the
