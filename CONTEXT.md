@@ -41,8 +41,9 @@ The audio file exactly as captured, retained unmodified.
 _Avoid_: Source, raw (as a noun), input.
 
 **Normalized**:
-The deterministic derived audio produced from an Original (mono 16 kHz PCM WAV target; exact
-procedure pinned by the normalization spec). Also called *derived* audio.
+The deterministic derived audio produced from an Original: **mono, 16 kHz, 16-bit PCM WAV**,
+downmix-by-mean → soxr `HQ` resample → `PCM_16`, with **no loudness change and no dither**
+(exact procedure and determinism guarantees pinned by ADR-0005). Also called *derived* audio.
 _Avoid_: Processed, converted, output.
 
 ### Annotation
