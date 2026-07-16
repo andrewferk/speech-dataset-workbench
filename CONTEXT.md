@@ -64,6 +64,15 @@ assignment, ready for a consumer (HF / NeMo). A Sample points at a Recording's N
 In v0.1 kept Recordings map 1:1 to Samples.
 _Avoid_: Row, example, item, recording (distinct — see above).
 
+**Split**:
+One of the three disjoint subsets a Dataset is partitioned into — **train**, **validation** (val),
+**test** — each Sample belonging to exactly one. The partition is **session-aware**: a whole Session
+is never torn across Splits (a Speaker may recur across Splits, as v0.1 data is single-speaker). The
+tool never trains or evaluates; it produces the Split labels a downstream consumer (HF / NeMo)
+honors, frozen into the Dataset Version so the partition is reproducible.
+_Avoid_: Fold, partition (as a noun for one subset), subset.
+_See_: ADR-0004 (session-aware splitting).
+
 **Dataset**:
 The complete collection defined by one input set. The tool is a stateless transform with no
 managed workbench directory: a Dataset is exactly the contents of one `--data-in`, transformed
