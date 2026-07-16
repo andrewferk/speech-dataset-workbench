@@ -97,6 +97,25 @@ normalization params, and the tool version. Identified by a content-derived id, 
 always yield the same version. A rebuild after adding data is a new Version.
 _Avoid_: Release, snapshot (as a noun), tag, revision.
 
+### Quality
+
+**Quality flag**:
+An advisory label attached to a Sample when an energy/amplitude check crosses a threshold — one of
+exactly three in v0.1: **clipping**, **low_volume**, **duration_out_of_range**. A flag never excludes
+or quarantines a Recording (all attempts are data); it is descriptive metadata a downstream consumer
+may filter on. Silence is measured but **never flagged** (leading/trailing/overall silence are
+report-only metrics). Distinct from a structural failure, which aborts the whole build (ADR-0005).
+_Avoid_: Error, warning, rejection, defect.
+_See_: ADR-0007 (audio validation & quality checks).
+
+**Quality report**:
+The emitted record of the quality checks: `reports/quality.jsonl` (one row per kept Recording, all
+metrics + its `flags` array) and the human quality digest in `reports/summary.txt` (a per-flag tally
+plus one line per flagged Recording). The `validate` command prints the same digest to stdout without
+writing anything. The Manifest itself carries no quality fields.
+_Avoid_: Validation log, QC output.
+_See_: ADR-0007 (audio validation & quality checks), ADR-0003 (report file locations).
+
 ### Metadata
 
 **Environment**:
