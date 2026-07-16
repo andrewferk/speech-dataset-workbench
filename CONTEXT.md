@@ -92,10 +92,18 @@ _Avoid_: Corpus, collection, project.
 _See_: ADR-0002 (stateless `--data-in`/`--data-out`).
 
 **Dataset Version**:
-An immutable snapshot produced by a build: a fixed set of Samples, their split assignment, the
-normalization params, and the tool version. Identified by a content-derived id, so identical inputs
-always yield the same version. A rebuild after adding data is a new Version.
+An immutable snapshot produced by a build: a fixed set of Samples with their metadata and split
+assignment, built under a fixed config and tool version. Identified by `dataset_version` — a
+content-derived id (`sha256:` + full 64 hex) computed over the **emitted manifest bytes** plus the
+effective config and the tool version, so identical inputs always yield the same Version and any
+change to a Sample, its metadata, its split, or a config knob yields a different one. Because the id
+covers the manifest as emitted, a Version is **recomputable from `--data-out` alone** — no access to
+`--data-in` required. It identifies the manifest and config, **not** the Normalized audio bytes
+(which ADR-0005 makes cross-arch non-bit-exact); the audio is covered via each Sample's
+`content_hash` of the Original. A rebuild after adding data, editing `recordings.csv`, or changing
+config is a new Version. Only the current Version exists on disk (ADR-0003).
 _Avoid_: Release, snapshot (as a noun), tag, revision.
+_See_: ADR-0010 (version & provenance mechanics), ADR-0001 (identifiers).
 
 ### Quality
 

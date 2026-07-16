@@ -25,9 +25,18 @@ only the operator knows.
 
 - **Dataset — no id.** One Dataset per workbench; the directory is the identity.
 
-- **`dataset_version` — content-derived.** A hash over the sorted Sample content-hashes plus the
-  normalization params and tool version. Identical inputs always produce the same version id, making
-  a build intrinsically reproducible with no external version registry.
+- **`dataset_version` — content-derived.** A hash over the emitted manifest, the effective config,
+  and the tool version. Identical inputs always produce the same version id, making a build
+  intrinsically reproducible with no external version registry.
+
+  > **Amended by ADR-0010.** This originally read "a hash over the sorted Sample content-hashes plus
+  > the normalization params and tool version". Both terms have since been superseded. The
+  > content-hashes alone cover only the Original *audio bytes*, so a metadata-only edit in
+  > `recordings.csv` (a prompt typo, a relabelled `session_id`) produced a colliding id across two
+  > different manifests — the CSV sidecar did not exist when this was written. And "normalization
+  > params" is now an empty set: ADR-0005 made normalization fixed constants with no config section,
+  > and they ride in via the tool version. ADR-0010 pins the byte-exact preimage; the decision here —
+  > content-derived, no registry — stands unchanged.
 
 - **`sample_id`.** In v0.1 Samples map 1:1 to Recordings, so a Sample is identified by its
   `recording_id`.

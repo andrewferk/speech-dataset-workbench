@@ -64,6 +64,10 @@ recognizes `val` as a validation-split keyword, so `audio/val/` needs no rename 
 
 ### `dataset.json`
 
+> **Amended by ADR-0010** (`config` block added; `split` reduced to realized counts; top-level
+> `lang` removed; `hashing.dataset_version` corrected). The shape below is superseded — see ADR-0010
+> for the current `dataset.json`.
+
 ```json
 {
   "manifest_version": "0.1",
@@ -83,17 +87,26 @@ recognizes `val` as a validation-split keyword, so `audio/val/` needs no rename 
 ```
 
 - The `normalization` and `hashing` blocks are recorded even though they are v0.1 constants, so the
-  dataset explains its own reproducibility inputs standalone — they are literally what feeds
-  `dataset_version`.
+  dataset explains its own reproducibility inputs standalone.
+
+  > **Corrected by ADR-0010.** This originally continued: "— they are literally what feeds
+  > `dataset_version`." They do not, and could not under any workable scheme. Normalization is fixed
+  > constants (ADR-0005) that reach the id via `tool_version`, and `hashing` merely describes the
+  > recipe. Both blocks remain, as **self-description**. What actually feeds the id is the emitted
+  > manifest plus the effective config — recorded in the new `config` block (ADR-0010).
 - The `sessions` inventory documents the session-aware partition (ADR-0004) at the dataset level,
   making "a whole Session is never torn" auditable without parsing the three manifests.
 - The **byte-exact serialization of the `dataset_version` hash preimage** (how the inputs above are
-  canonicalized before hashing) is pinned by the dataset-versioning/provenance decision, not here.
+  canonicalized before hashing) is pinned by **ADR-0010**, not here. Note its consequence for this
+  ADR: the preimage hashes the emitted `train/val/test.jsonl` **bytes**, so every field in the table
+  above is covered by the id automatically, and any field added here in future is covered without
+  touching ADR-0010.
 
 ### Config
 
 - This ADR owns the **`[manifest]`** config section. Its only v0.1 key is **`lang`** — an optional
-  ISO 639-1 code (default unset → emitted as `null` in every row and in `dataset.json`).
+  ISO 639-1 code (default unset → emitted as `null` in every row, and under `config.manifest.lang`
+  in `dataset.json`; ADR-0010 removed the top-level `lang` field).
 
 ### Determinism
 
