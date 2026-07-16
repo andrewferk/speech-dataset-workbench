@@ -64,6 +64,16 @@ One row of a dataset/manifest: a single Normalized audio file plus its metadata 
 assignment, ready for a consumer (HF / NeMo). A Sample points at a Recording's Normalized audio.
 In v0.1 kept Recordings map 1:1 to Samples.
 _Avoid_: Row, example, item, recording (distinct — see above).
+_See_: ADR-0006 (manifest format — the exact per-Sample fields).
+
+**Manifest**:
+The **output** HF/NeMo artifact describing a Dataset's Samples: the per-Split `train/val/test.jsonl`
+(canonical, NeMo-native) plus the per-Split `audio/<split>/metadata.jsonl` (HF `audiofolder` view),
+alongside the `dataset.json` descriptor. Each Manifest line is one Sample. "Manifest" always names
+this emitted artifact — the **input** index the operator authors is `recordings.csv`, never a
+"manifest".
+_Avoid_: Index, listing, catalog; recordings.csv (that is input, not a Manifest).
+_See_: ADR-0006 (manifest format), ADR-0003 (where the files sit).
 
 **Split**:
 One of the three disjoint subsets a Dataset is partitioned into — **train**, **validation** (val),
