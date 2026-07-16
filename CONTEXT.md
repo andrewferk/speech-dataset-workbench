@@ -124,6 +124,20 @@ writing anything. The Manifest itself carries no quality fields.
 _Avoid_: Validation log, QC output.
 _See_: ADR-0007 (audio validation & quality checks), ADR-0003 (report file locations).
 
+### Visualization
+
+**Image**:
+A rendered PNG view of a Recording's **Normalized** audio, emitted for **every** Recording on every
+build as exactly two per Recording: `images/<recording_id>.waveform.png` and
+`images/<recording_id>.spectrogram.png`. An Image is an **operator inspection aid** — a diagnostic
+surface, never part of the Dataset a consumer receives, and outside `dataset_version` (ADR-0010).
+An Image states **measurements, never verdicts**: it renders the peak/RMS values the quality checks
+computed, but carries no Quality flag and reads no threshold. Its scales are absolute and fixed
+(waveform y at ±1.0; spectrogram at −80..0 dBFS) so an Image can never contradict a Quality flag —
+a quiet Recording looks quiet.
+_Avoid_: Plot, figure, chart, viz, thumbnail, preview.
+_See_: ADR-0011 (visualization output), ADR-0003 (image naming & location).
+
 ### Metadata
 
 **Environment**:
