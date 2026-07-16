@@ -141,6 +141,17 @@ tests/
 - Testing introduces no domain vocabulary, so `CONTEXT.md` is unchanged (it is a domain glossary with
   no implementation detail; synth/golden/reference-tree are testing terms).
 
+## Amendments
+
+- **ADR-0009 (seed / example data) adds one test to this suite**: it regenerates
+  `examples/data-in/*.wav` via `examples/generate.py` into a tmpdir and **byte-compares** against
+  the committed WAVs, so generator/output drift is a CI failure. `examples/generate.py` imports
+  `tests/synth.py` (this ADR's single source of fixture truth), which requires `tests/__init__.py`.
+  The comparison is safely **exact** — `generate.py` writes 16 kHz mono directly and never
+  resamples, so ADR-0005's within-arch-only caveat does not reach it. This ADR's separation of the
+  demo data from `tests/fixtures/reference/` (see Rejected alternatives) still stands: only the
+  *generator* is shared, not the fixtures.
+
 ## Rejected alternatives
 
 - **Pure committed WAV corpus (no synth)** — rejected; opaque binaries drift into magic files, can't
