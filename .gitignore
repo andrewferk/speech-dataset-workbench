@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Tooling
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# An operator's local config (ADR-0002). Its committed companion, config.example.toml,
+# arrives with config loading (#23).
+/config.toml
+
+# No audio globs: synthetic fixtures under tests/ and examples/ are committed on purpose
+# (ADR-0002, ADR-0009). No output-dir ignore: --data-out is an explicit external path.

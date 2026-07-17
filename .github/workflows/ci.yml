@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Single-OS on the pinned Python floor; the cross-arch normalization caveat of ADR-0005 is
+# documented, not CI-enforced (ADR-0008).
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    # src-layout with no build backend: nothing installs the package, so `python -m sdw`
+    # needs src/ on the path. mise.toml sets the same variable for local development.
+    env:
+      PYTHONPATH: src
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          # The floor, pinned explicitly: requires-python is a range, so without this the
+          # runner's default interpreter could drift off 3.13 unnoticed.
+          python-version-file: .python-version
+
+      - name: Install the pinned toolchain
+        run: uv sync --locked
+
+      - name: ruff
+        run: |
+          uv run ruff check .
+          uv run ruff format --check .
+
+      - name: mypy --strict
+        run: uv run mypy --strict
+
+      # Coverage is measured, not enforced: no pass/fail percentage (ADR-0008).
+      - name: pytest
+        run: uv run pytest

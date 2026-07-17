@@ -1,0 +1,8 @@
+[tools]
+python = "3.13"
+uv = "latest"
+
+# src-layout with no build backend (ADR-0012) means nothing installs the package, so the
+# entry point `python -m sdw` needs src/ on the path. CI sets the same variable.
+[env]
+PYTHONPATH = "{{config_root}}/src"
