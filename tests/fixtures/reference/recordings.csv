@@ -1,0 +1,5 @@
+path,speaker_id,session_id,prompt_text,device,environment
+passthrough_16k_mono.wav,spk_a,sess_a1,The quick brown fox jumps over the lazy dog.,usb condenser microphone,quiet room
+resample_48k_mono.wav,spk_a,sess_a2,She sells sea shells by the sea shore.,usb condenser microphone,quiet room
+downmix_16k_stereo.wav,spk_b,sess_b1,How much wood would a woodchuck chuck.,laptop stereo array,home office
+depth_16k_mono_24bit.wav,spk_b,sess_b2,A stitch in time saves nine.,field recorder,home office
