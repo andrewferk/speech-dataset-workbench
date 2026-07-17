@@ -40,7 +40,7 @@ refined to:
 no-audio-globs rule. At mono/16 kHz/16-bit (~32 KB/sec), ~12 clips of a few seconds is well under
 a megabyte; size is not an argument either way.
 
-### Shape — 2 speakers × 2 sessions, ~12 recordings
+### Shape — 2 speakers × 4 sessions, ~12 recordings
 
 The shape is driven by what the example must demonstrate, not by taste:
 
@@ -90,6 +90,29 @@ failure rather than a maintenance chore, and the generator's determinism becomes
 This is safe to assert **exactly**: ADR-0005's within-arch-only bit-exactness caveat stems from
 soxr's FFT ULPs, and `examples/generate.py` writes 16 kHz mono directly and **never resamples** —
 its output is plain numpy arithmetic and is cross-machine stable.
+
+## Amendment: the first run is noisier than this ADR anticipated (added by #18)
+
+The *Shape* section above justifies 4 Sessions partly on the grounds that the first run prints **no
+produce-and-flag warning**. That remains true. But #19 subsequently made *clearing the ≥3-Session
+floor* **visible**, and the demo's first run now shows four signals:
+
+1. configured **80/10/10**, realized **50/25/25** — a 30-point miss (whole Sessions are indivisible;
+   80/10/10 is inexpressible across 4 equal Sessions)
+2. a non-emptiness repair line — `moved session h1 from train to test`
+3. the speaker-overlap note (why this ADR wants two speakers)
+4. one `low_volume` flag (why this ADR wants one quiet take)
+
+This ADR's letter is threatened; its intent is not. The warning it dodged is **produce-and-flag** —
+an unmissable signal that the dataset is *unusable*: splits empty, build broken. #19's disclosures
+are the opposite kind of object — a build that **worked**, being honest about how. The shape stands
+unchanged, and `examples/README.md` **predicts each signal before the reader meets it**; the four
+disclosures are the walkthrough's content, not its embarrassment. See ADR-0012.
+
+Note what is *not* being claimed: 4 Sessions was **not** chosen to trigger a repair. It was chosen to
+clear the floor, and the repair is a consequence that landed later — **discovered, not designed**.
+Anyone revisiting the shape should know that, because it means the repair is a fact about 4-Session
+corpora rather than a property someone wanted.
 
 ## Consequences
 
