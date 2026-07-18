@@ -8,7 +8,7 @@ quality flag is descriptive metadata a downstream consumer may filter on. All at
 
 Three facts pin the shape:
 
-- **Clipping reads the Original, everything else reads the Normalized.** A clip is a flat-top
+- **Clipping reads the Original, everything else reads the Normalized.** Clipping is a flat-top
   artifact of the *capture*: the downmix can average a clipped channel away and soxr smears the
   flat top and adds overshoot, so a post-resample clip metric is systematically wrong in both
   directions. The other three metrics describe what the Sample actually ships, so they read the
@@ -53,7 +53,8 @@ SILENCE_FRAME_SAMPLES = int(SILENCE_FRAME_S * TARGET_SAMPLE_RATE)
 MIN_SILENCE_RUN_SAMPLES = int(MIN_SILENCE_RUN_S * TARGET_SAMPLE_RATE)
 
 # The v0.1 flag vocabulary, in full. Silence contributes metrics only and raises nothing: a natural
-# pause is not a defect. `flags` is always ordered by this tuple, so two runs agree byte for byte.
+# pause is something to report, not something to flag. `flags` is always ordered by this tuple, so
+# two runs agree byte for byte.
 FLAG_CLIPPING = "clipping"
 FLAG_LOW_VOLUME = "low_volume"
 FLAG_DURATION_OUT_OF_RANGE = "duration_out_of_range"
@@ -139,7 +140,7 @@ def _clipping(original: npt.NDArray[np.float64]) -> tuple[float, float]:
 def _run_sample_count(mask: npt.NDArray[np.bool_]) -> int:
     """How many samples of ``mask`` belong to a run of >= :data:`CLIP_RUN_MIN` consecutive Trues.
 
-    A lone sample at full scale is a transient, not a clip, and contributes nothing. Counting is
+    A lone sample at full scale is a transient, not a clip run, and contributes nothing. Counting is
     done on run boundaries — the diff of the padded mask marks each run's start and end — so the
     whole channel is one vectorized pass rather than a Python loop over samples.
     """
@@ -158,7 +159,7 @@ class _Silence:
     """The silence measurements plus the active window the low-volume check reuses.
 
     All three reported numbers are report-only: silence raises no flag, so a Recording that opens
-    with a breath and closes with a pause is described, never faulted.
+    with a breath and closes with a pause is described, never flagged.
     """
 
     leading_s: float
@@ -190,10 +191,11 @@ def _silence(samples: npt.NDArray[np.float64], threshold_dbfs: float) -> _Silenc
     )
     active = np.flatnonzero(~silent)
     if active.size == 0:
-        # Wholly silent: one run spanning the file, which is both the leading and the trailing run,
-        # and no active region at all. The guard still applies — it applies to *the leading and
-        # trailing runs*, and this is one, so a 0.1 s dead file reports 0.0 exactly as a 0.1 s
-        # leading pause does. `low_volume` is what says this Recording is empty; silence never does.
+        # Wholly silent: one run spanning the whole Recording, which is both the leading and the
+        # trailing run, and no active region at all. The guard still applies — it applies to *the
+        # leading and trailing runs*, and this is one, so a 0.1 s dead Recording reports 0.0 exactly
+        # as a 0.1 s leading pause does. `low_volume` is what says this Recording is empty; silence
+        # never does.
         return _Silence(
             leading_s=_guarded(len(samples)),
             trailing_s=_guarded(len(samples)),
@@ -300,4 +302,7 @@ def _evidence(flag: str, metrics: QualityMetrics) -> str:
         )
     if flag == FLAG_LOW_VOLUME:
         return f"active_rms={metrics.active_rms_dbfs:.{_DBFS_DP}f}dBFS"
+    # `flags` only ever holds names from :data:`FLAGS`, and the vocabulary is exactly three, so the
+    # remaining case is duration. A fourth flag would be an ADR-0007 change, and this cascade is
+    # one of the places that would have to change with it.
     return f"duration={metrics.duration_s:.{_SECONDS_DP}f}s"
