@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests import synth
+
 REPO_ROOT = Path(__file__).parents[2]
 
 
@@ -25,17 +27,7 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _minimal_data_in(tmp_path: Path) -> Path:
-    # A minimally-valid --data-in: one recordings.csv row pointing at one Original. Ingest hashes
-    # the bytes without decoding (#24), so the file contents are unconstrained here.
-    data_in = tmp_path / "in"
-    data_in.mkdir()
-    (data_in / "a.wav").write_bytes(b"an original's bytes")
-    (data_in / "recordings.csv").write_text(
-        "path,speaker_id,session_id,prompt_text,device,environment\n"
-        "a.wav,spk_a,sess_1,Hello there.,mic,quiet room\n",
-        encoding="utf-8",
-    )
-    return data_in
+    return synth.write_minimal_data_in(tmp_path / "in")
 
 
 def test_build_exits_zero(tmp_path: Path) -> None:
@@ -48,6 +40,18 @@ def test_validate_exits_zero(tmp_path: Path) -> None:
     data_in = _minimal_data_in(tmp_path)
     result = run("validate", "--data-in", str(data_in))
     assert result.returncode == 0, result.stderr
+
+
+def test_undecodable_original_exits_non_zero_with_no_data_out(tmp_path: Path) -> None:
+    # The decode gate as a real process outcome: an Original that is not a decodable WAV aborts
+    # `build` with a non-zero exit and leaves no --data-out behind (#25, ADR-0005/ADR-0003).
+    data_in = _minimal_data_in(tmp_path)
+    synth.write_non_wav(data_in / "a.wav")
+    data_out = tmp_path / "out"
+    result = run("build", "--data-in", str(data_in), "--data-out", str(data_out))
+    assert result.returncode != 0
+    assert result.stderr
+    assert not data_out.exists()
 
 
 def test_hard_error_exits_non_zero(tmp_path: Path) -> None:

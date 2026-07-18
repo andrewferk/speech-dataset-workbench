@@ -17,6 +17,7 @@ inputs build on it.
 from __future__ import annotations
 
 import csv
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -28,6 +29,9 @@ import soundfile as sf
 # libsndfile subtypes for the bit depths we emit. Signed PCM only — the Normalized target and
 # every Original we synthesize is integer PCM (ADR-0005).
 _SUBTYPE: dict[int, str] = {16: "PCM_16", 24: "PCM_24", 32: "PCM_32"}
+
+# The recordings.csv column set (#24, ADR-0006), shared by every --data-in this module writes.
+_CSV_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
 
 
 def _subtype(bit_depth: int) -> str:
@@ -168,6 +172,40 @@ def leading_trailing_silence(
     sf.write(path, _to_channels(mono, channels), sample_rate, subtype=subtype)
 
 
+def write_minimal_data_in(root: Path) -> Path:
+    """The smallest input that survives the whole preflight: one CSV row, one real WAV.
+
+    For tests whose subject is *not* the input — the CLI's arg surface, exit codes, the entry
+    point. The Original is genuinely decodable because normalization decodes every listed file and
+    a decode failure aborts (ADR-0005); overwrite ``a.wav`` with one of the abort-case writers above
+    to turn this into a failing input. Returns ``root`` for use as ``--data-in``.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    write_wav(
+        root / "a.wav",
+        freq_hz=400.0,
+        amp_dbfs=-18.0,
+        duration_s=0.5,
+        sample_rate=16000,
+        bit_depth=16,
+        channels=1,
+    )
+    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "path": "a.wav",
+                "speaker_id": "spk_a",
+                "session_id": "sess_1",
+                "prompt_text": "Hello there.",
+                "device": "mic",
+                "environment": "quiet room",
+            }
+        )
+    return root
+
+
 # --- Abort-case inputs (structural failures that must abort a build, ADR-0005/ADR-0007) ------
 
 
@@ -181,6 +219,27 @@ def write_zero_frame_wav(path: Path) -> None:
     sf.write(path, np.zeros(0, dtype=np.float64), 16000, subtype=_SUBTYPE[16])
 
 
+def write_wrong_container(path: Path) -> None:
+    """Write a FLAC to a ``.wav``-named file: decodable, but not a WAV.
+
+    The sharpest case for the WAV-only contract (ADR-0005) — libsndfile decodes this happily, so
+    only a container check rejects it. The name is what lies; the bytes are honest FLAC.
+    """
+    sf.write(path, np.zeros(16000, dtype=np.float64), 16000, format="FLAC", subtype=_SUBTYPE[16])
+
+
+def write_truncated_wav(path: Path, *, keep_bytes: int = 20) -> None:
+    """Write the first ``keep_bytes`` of a real WAV: a header cut mid-chunk, so the decode fails.
+
+    Truncating inside the ``fmt `` chunk (the default) is what makes this a *decode* failure rather
+    than a short-but-readable file: libsndfile happily reads a file whose *data* chunk is short, so
+    lopping off the tail would not exercise the abort path (ADR-0005).
+    """
+    buffer = io.BytesIO()
+    sf.write(buffer, np.zeros(16000, dtype=np.float64), 16000, subtype=_SUBTYPE[16], format="WAV")
+    path.write_bytes(buffer.getvalue()[:keep_bytes])
+
+
 # --- The committed reference --data-in (ADR-0008) --------------------------------------------
 
 # The single small reference input the golden end-to-end test will anchor to, and a
@@ -191,8 +250,6 @@ def write_zero_frame_wav(path: Path) -> None:
 # quality.jsonl can be an exact golden with no tolerance machinery (ADR-0008). Prompts are
 # honest English; the audio is tones (ADR-0009). Four Sessions across two Speakers clear
 # ADR-0004's >= 3-Session floor for the future split golden.
-
-_REFERENCE_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
 
 
 @dataclass(frozen=True)
@@ -292,7 +349,7 @@ def write_reference_tree(root: Path) -> None:
             channels=rec.channels,
         )
     with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_REFERENCE_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
         writer.writeheader()
         for rec in _REFERENCE_RECORDINGS:
             writer.writerow(rec.csv_row())
