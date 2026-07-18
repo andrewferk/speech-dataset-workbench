@@ -10,7 +10,7 @@ Three facts pin the shape:
 
 - **Identity is content, not the row.** ``recording_id``/``content_hash`` hash the Original file
   *bytes* and ``prompt_id`` hashes the normalized Prompt *text* (ADR-0001), so byte-identical
-  Originals collapse to one Recording and the same sentence deduplicates across Sessions. Nothing
+  Originals collapse to one Recording and the same Prompt deduplicates across Sessions. Nothing
   here decodes the audio — decodability is the normalization stage's gate (ADR-0005), a later
   ticket; this stage only reads bytes.
 
@@ -40,10 +40,11 @@ RECORDINGS_CSV = "recordings.csv"
 # set must match — a missing column, or an unexpected one, is a structural error.
 COLUMNS = ("path", "speaker_id", "session_id", "prompt_text", "device", "environment")
 
-# The manifest-bearing fields that must agree when two rows share one Original. ``path`` is
-# excluded on purpose: two *different* paths pointing at byte-identical bytes is the collapse case,
-# not a conflict (ADR-0001/0013).
-_IDENTITY_FIELDS = ("speaker_id", "session_id", "prompt_text", "device", "environment")
+# The manifest-bearing fields that must agree when two rows share one Original. A Recording's
+# identity is its bytes (ADR-0001), not these — they are what has to match for the collapse to be
+# unambiguous. ``path`` is excluded on purpose: two *different* paths pointing at byte-identical
+# bytes is the collapse case, not a conflict (ADR-0001/0013).
+_AGREEMENT_FIELDS = ("speaker_id", "session_id", "prompt_text", "device", "environment")
 
 
 @dataclass(frozen=True)
@@ -180,7 +181,7 @@ def _collapse(recordings: list[Recording]) -> list[Recording]:
             by_hash[recording.content_hash] = recording
             continue
         conflict = next(
-            (f for f in _IDENTITY_FIELDS if getattr(seen, f) != getattr(recording, f)), None
+            (f for f in _AGREEMENT_FIELDS if getattr(seen, f) != getattr(recording, f)), None
         )
         if conflict is not None:
             raise HardError(
