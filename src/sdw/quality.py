@@ -258,7 +258,11 @@ def _dbfs(amplitude: float) -> float:
 
 
 def render_digest(results: Sequence[tuple[str, QualityMetrics]]) -> str:
-    """The human quality digest: a per-flag tally, then one line per flagged Recording.
+    """The human quality digest: a per-flag tally, then one line per ``(Recording, flag)`` pair.
+
+    A Recording carrying two flags gets two lines, because the evidence a line states is *per
+    flag* — combining them would concatenate two unrelated sets of numbers and the flag column
+    would stop being one value wide (ADR-0007).
 
     The same text `validate` prints to stdout and `build` folds into `reports/summary.txt`, so the
     two commands can never describe one input differently. Clean Recordings are counted but not
