@@ -17,26 +17,9 @@ from tests import synth
 
 @pytest.fixture
 def data_in(tmp_path: Path) -> Path:
-    # A minimally-valid input: one recordings.csv row pointing at one Original. The Original is a
-    # real decodable WAV because normalization now decodes every listed file and a decode failure
-    # aborts (#25, ADR-0005). These tests still pin only the arg surface and exit codes.
-    d = tmp_path / "data-in"
-    d.mkdir()
-    synth.write_wav(
-        d / "a.wav",
-        freq_hz=400.0,
-        amp_dbfs=-18.0,
-        duration_s=0.5,
-        sample_rate=16000,
-        bit_depth=16,
-        channels=1,
-    )
-    (d / "recordings.csv").write_text(
-        "path,speaker_id,session_id,prompt_text,device,environment\n"
-        "a.wav,spk_a,sess_1,Hello there.,mic,quiet room\n",
-        encoding="utf-8",
-    )
-    return d
+    # A minimally-valid input, so these tests stay about the arg surface and exit codes. The
+    # abort-case tests below overwrite `a.wav` to make it fail.
+    return synth.write_minimal_data_in(tmp_path / "data-in")
 
 
 @pytest.fixture

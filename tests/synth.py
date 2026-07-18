@@ -30,6 +30,9 @@ import soundfile as sf
 # every Original we synthesize is integer PCM (ADR-0005).
 _SUBTYPE: dict[int, str] = {16: "PCM_16", 24: "PCM_24", 32: "PCM_32"}
 
+# The recordings.csv column set (#24, ADR-0006), shared by every --data-in this module writes.
+_CSV_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
+
 
 def _subtype(bit_depth: int) -> str:
     """The libsndfile subtype for ``bit_depth``, or a clear error for an unsupported depth."""
@@ -169,6 +172,40 @@ def leading_trailing_silence(
     sf.write(path, _to_channels(mono, channels), sample_rate, subtype=subtype)
 
 
+def write_minimal_data_in(root: Path) -> Path:
+    """The smallest input that survives the whole preflight: one CSV row, one real WAV.
+
+    For tests whose subject is *not* the input — the CLI's arg surface, exit codes, the entry
+    point. The Original is genuinely decodable because normalization decodes every listed file and
+    a decode failure aborts (ADR-0005); overwrite ``a.wav`` with one of the abort-case writers above
+    to turn this into a failing input. Returns ``root`` for use as ``--data-in``.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    write_wav(
+        root / "a.wav",
+        freq_hz=400.0,
+        amp_dbfs=-18.0,
+        duration_s=0.5,
+        sample_rate=16000,
+        bit_depth=16,
+        channels=1,
+    )
+    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerow(
+            {
+                "path": "a.wav",
+                "speaker_id": "spk_a",
+                "session_id": "sess_1",
+                "prompt_text": "Hello there.",
+                "device": "mic",
+                "environment": "quiet room",
+            }
+        )
+    return root
+
+
 # --- Abort-case inputs (structural failures that must abort a build, ADR-0005/ADR-0007) ------
 
 
@@ -213,8 +250,6 @@ def write_truncated_wav(path: Path, *, keep_bytes: int = 20) -> None:
 # quality.jsonl can be an exact golden with no tolerance machinery (ADR-0008). Prompts are
 # honest English; the audio is tones (ADR-0009). Four Sessions across two Speakers clear
 # ADR-0004's >= 3-Session floor for the future split golden.
-
-_REFERENCE_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
 
 
 @dataclass(frozen=True)
@@ -314,7 +349,7 @@ def write_reference_tree(root: Path) -> None:
             channels=rec.channels,
         )
     with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_REFERENCE_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
         writer.writeheader()
         for rec in _REFERENCE_RECORDINGS:
             writer.writerow(rec.csv_row())

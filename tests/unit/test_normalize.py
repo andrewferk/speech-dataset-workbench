@@ -203,13 +203,24 @@ class TestDecodeGate:
         with pytest.raises(HardError, match="not a WAV"):
             normalize(tmp_path / "a.wav")
 
-    def test_a_float_subtype_wav_is_accepted(self, tmp_path: Path) -> None:
-        # The gate is the container, not the subtype: a float WAV is a normal export, and it is
-        # a WAV, so it is data. It normalizes to the same float64 as any other Original.
+    @pytest.mark.parametrize("subtype", ["FLOAT", "DOUBLE", "ULAW", "ALAW", "IMA_ADPCM"])
+    def test_a_non_pcm_wav_aborts(self, tmp_path: Path, subtype: str) -> None:
+        # "PCM WAV only" binds the encoding as well as the container (ADR-0005). The case that
+        # makes the rule matter is MPEG_LAYER_III — an MP3 inside a WAV container, precisely the
+        # lossy source ADR-0005 rejected by name, which a container-only gate would admit. It is
+        # absent here only because this libsndfile build cannot *encode* it, so the fixture cannot
+        # be synthesized (ADR-0008 forbids shipping external audio); these stand in for it.
         path = tmp_path / "a.wav"
-        tone, _ = sf.read(_original(tmp_path / "tone.wav"), dtype="float64")
-        sf.write(path, tone, 16000, subtype="FLOAT")
-        assert normalize(path).samples == pytest.approx(tone, abs=1e-7)
+        sf.write(path, np.zeros(16000, dtype=np.float64), 16000, subtype=subtype)
+        with pytest.raises(HardError, match="not a PCM WAV"):
+            normalize(path)
+
+    @pytest.mark.parametrize("bit_depth", [16, 24, 32])
+    def test_every_pcm_depth_is_accepted(self, tmp_path: Path, bit_depth: int) -> None:
+        # The gate is "PCM", not "16-bit": the Original's depth is what normalization exists to
+        # canonicalize, so every signed PCM depth is data.
+        audio = normalize(_original(tmp_path / "a.wav", bit_depth=bit_depth))
+        assert len(audio.samples) == 16000
 
     def test_truncated_wav_aborts(self, tmp_path: Path) -> None:
         synth.write_truncated_wav(tmp_path / "a.wav")

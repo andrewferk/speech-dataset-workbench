@@ -2,9 +2,10 @@
 
 The second pipeline stage. Ingest (#24) resolved which Originals make up the Dataset without
 decoding a byte; this stage decodes them, and in doing so *is* ADR-0005's ingest gate: a file that
-is not WAV, or is a corrupt, truncated, or zero-frame WAV, raises :class:`HardError` and aborts the
-run (non-zero exit, no durable output). A file that decodes but sounds bad — silent, clipped, too
-quiet — is not an error here; that is a soft quality flag owned by a later stage (ADR-0007).
+is not a PCM WAV, or is a corrupt, truncated, or zero-frame one, raises :class:`HardError` and
+aborts the run (non-zero exit, no durable output). A file that decodes but sounds bad — silent,
+clipped, too quiet — is not an error here; that is a soft quality flag owned by a later stage
+(ADR-0007).
 
 Three things pin the shape:
 
@@ -42,10 +43,19 @@ from sdw.errors import HardError
 TARGET_SAMPLE_RATE = 16000
 TARGET_SUBTYPE = "PCM_16"
 
-# The libsndfile container formats that count as "a WAV". WAVEX (extensible) and RF64 (the >4 GB
-# variant) are RIFF WAV files, so all three satisfy ADR-0005's WAV-only contract; a FLAC or OGG
-# carrying a `.wav` name does not, even though libsndfile would happily decode it.
+# ADR-0005 accepts "PCM WAV only", which is two conditions, and libsndfile reports them separately.
+#
+# The container must be a RIFF WAV: WAVEX (extensible) and RF64 (the >4 GB variant) are WAV files
+# too, so all three qualify; a FLAC or OGG carrying a `.wav` name does not, even though libsndfile
+# would decode it happily.
+#
+# The encoding must be PCM. This is not pedantry about the word: a WAV container can carry
+# `MPEG_LAYER_III`, `ULAW`, or ADPCM, and an MP3-in-a-WAV is exactly the lossy source ADR-0005
+# rejected by name ("WAV + MP3 ingest — Rejected"). A container-only gate would let it in through
+# the back door. `FLOAT`/`DOUBLE` WAVs are lossless but still not PCM, and ADR-0005's decision is
+# the narrow one; widening it is an ADR change, not a code change.
 _WAV_FORMATS = frozenset({"WAV", "WAVEX", "RF64"})
+_PCM_SUBTYPE_PREFIX = "PCM_"
 
 # python-soxr's quality setting. "HQ" is soxr's default-quality band-limited resampler; ADR-0005
 # picked it over `scipy.signal.resample_poly` on quality, accepting libsoxr's LGPL.
@@ -97,27 +107,27 @@ def write_normalized(audio: NormalizedAudio, path: Path) -> None:
 def _decode(path: Path) -> tuple[npt.NDArray[np.float64], int]:
     """Read the Original to float64, or abort.
 
-    Three ways this aborts, all structural: soundfile refuses the file (it is not audio at all, or
-    is a corrupt or truncated WAV), it decodes but is not a WAV container (v0.1 ingests WAV only —
-    a FLAC wearing a ``.wav`` name is not an Original the tool accepts), or it is a WAV whose header
-    describes zero frames. Any of them aborts the run rather than letting a Dataset Version quietly
-    stand for a subset of the intended input (ADR-0005).
+    Four ways this aborts, all structural: soundfile refuses the file (it is not audio at all, or is
+    a corrupt or truncated WAV), it decodes but is not a WAV container, it is a WAV that does not
+    carry PCM, or it is a WAV whose header describes zero frames. Any of them aborts the run rather
+    than letting a Dataset Version quietly stand for a subset of the intended input (ADR-0005).
 
-    The container check is deliberately about the container and not the subtype: ADR-0005's abort
-    list is "not WAV / corrupt / truncated / zero-frame", so a float-subtype WAV — a normal DAW
-    export — is data, and decodes to the same float64 as any other.
+    Decodability alone is not the test, because libsndfile decodes far more than v0.1 accepts — see
+    :data:`_WAV_FORMATS` for why both halves of "PCM WAV" have to be checked.
     """
     # One open, not `sf.info` then `sf.read`: the header check and the decode must see the same
     # file, and the decoded samples are the clipping tap's only read of it.
     try:
         with sf.SoundFile(path) as handle:
-            container = handle.format
+            container, encoding = handle.format, handle.subtype
             sample_rate = int(handle.samplerate)
             samples: npt.NDArray[np.float64] = handle.read(dtype="float64", always_2d=False)
     except (sf.LibsndfileError, OSError) as error:
         raise HardError(f"cannot decode Original as WAV: {path} ({error})") from error
     if container not in _WAV_FORMATS:
         raise HardError(f"Original is not a WAV (libsndfile reports {container}): {path}")
+    if not encoding.startswith(_PCM_SUBTYPE_PREFIX):
+        raise HardError(f"Original is not a PCM WAV (libsndfile reports {encoding}): {path}")
     if len(samples) == 0:
         raise HardError(f"Original decodes to zero frames: {path}")
     return samples, int(sample_rate)
