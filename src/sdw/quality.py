@@ -190,11 +190,13 @@ def _silence(samples: npt.NDArray[np.float64], threshold_dbfs: float) -> _Silenc
     )
     active = np.flatnonzero(~silent)
     if active.size == 0:
-        # Wholly silent: the whole file is both the leading and the trailing run, and there is no
-        # active region. The guard cannot rescue it — there is nothing else here to be silence for.
+        # Wholly silent: one run spanning the file, which is both the leading and the trailing run,
+        # and no active region at all. The guard still applies — it applies to *the leading and
+        # trailing runs*, and this is one, so a 0.1 s dead file reports 0.0 exactly as a 0.1 s
+        # leading pause does. `low_volume` is what says this Recording is empty; silence never does.
         return _Silence(
-            leading_s=_seconds(len(samples)),
-            trailing_s=_seconds(len(samples)),
+            leading_s=_guarded(len(samples)),
+            trailing_s=_guarded(len(samples)),
             ratio=1.0,
             active_start=0,
             active_end=0,
@@ -259,6 +261,10 @@ def render_digest(results: Sequence[tuple[str, QualityMetrics]]) -> str:
     The same text `validate` prints to stdout and `build` folds into `reports/summary.txt`, so the
     two commands can never describe one input differently. Clean Recordings are counted but not
     listed — the digest is a worklist. Deterministic: no wall-clock, no host, no set iteration.
+
+    The tally lists all three flags even at zero, so the digest has one fixed shape: an operator
+    diffing two runs sees a count change rather than a line appear, and a zero is itself the useful
+    answer to "did anything clip?". Only the flagged *list* is elided when empty.
     """
     flagged = [(rid, metrics) for rid, metrics in results if metrics.flags]
     lines = [

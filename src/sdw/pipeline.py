@@ -40,7 +40,7 @@ def _preflight(data_in: Path, config: Path | None) -> tuple[Config, list[Recordi
     return resolved, recordings
 
 
-def _measure_all(
+def _normalize_and_measure(
     data_in: Path, recordings: list[Recording], config: Config
 ) -> list[tuple[str, QualityMetrics]]:
     """Normalize and measure every Recording, one at a time, keeping only its metrics (#25, #26).
@@ -66,7 +66,7 @@ def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
     resolved, recordings = _preflight(data_in, config)
     # Measured but not yet written: `reports/quality.jsonl` and the `summary.txt` quality section
     # are the reporting ticket's (#27), which renders these same metrics.
-    _measure_all(data_in, recordings, resolved)
+    _normalize_and_measure(data_in, recordings, resolved)
 
 
 def validate(*, data_in: Path, config: Path | None) -> None:
@@ -78,4 +78,4 @@ def validate(*, data_in: Path, config: Path | None) -> None:
     because the operator curates by editing `recordings.csv`, not by the tool refusing to proceed.
     """
     resolved, recordings = _preflight(data_in, config)
-    print(quality.render_digest(_measure_all(data_in, recordings, resolved)), end="")
+    print(quality.render_digest(_normalize_and_measure(data_in, recordings, resolved)), end="")

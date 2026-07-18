@@ -48,11 +48,24 @@ def _write(path: Path, mono: np.ndarray, *, sample_rate: int = 16000) -> Path:
     return path
 
 
-def _tone(path: Path, **kwargs: float) -> Path:
-    defaults = dict(
-        freq_hz=400.0, amp_dbfs=-18.0, duration_s=1.0, sample_rate=16000, bit_depth=16, channels=1
+def _tone(
+    path: Path,
+    *,
+    amp_dbfs: float = -18.0,
+    duration_s: float = 1.0,
+    sample_rate: int = 16000,
+    freq_hz: float = 400.0,
+) -> Path:
+    """A clean tone parked clear of every knob, so a test overrides only the axis it is about."""
+    synth.write_wav(
+        path,
+        freq_hz=freq_hz,
+        amp_dbfs=amp_dbfs,
+        duration_s=duration_s,
+        sample_rate=sample_rate,
+        bit_depth=16,
+        channels=1,
     )
-    synth.write_wav(path, **{**defaults, **kwargs})  # type: ignore[arg-type]
     return path
 
 
@@ -162,6 +175,18 @@ class TestSilence:
         assert metrics.leading_silence_s == pytest.approx(1.0)
         assert metrics.trailing_silence_s == pytest.approx(1.0)
 
+    def test_the_guard_applies_to_a_wholly_silent_recording_too(self, tmp_path: Path) -> None:
+        # The guard applies to *the leading and trailing runs*, and a dead 0.1 s file is one such
+        # run — so it reports 0.0, exactly as a 0.1 s leading pause does. Reporting 0.1 here while
+        # reporting 0.0 there would make the same measurement mean two things.
+        synth.silence(tmp_path / "a.wav", duration_s=0.1)
+        metrics = _measure(tmp_path / "a.wav")
+        assert metrics.leading_silence_s == 0.0
+        assert metrics.trailing_silence_s == 0.0
+        # Still wholly silent, and still low_volume — silence itself never flags.
+        assert metrics.silence_ratio == 1.0
+        assert FLAG_LOW_VOLUME in metrics.flags
+
 
 class TestLowVolume:
     def test_a_clean_level_clears_the_flag(self, tmp_path: Path) -> None:
@@ -248,18 +273,31 @@ class TestFlagsTogether:
 
 
 class TestDigest:
-    def _metrics(self, **overrides: object) -> QualityMetrics:
-        base = dict(
-            duration_s=2.0,
-            peak_dbfs=-6.0,
-            clip_ratio=0.0,
-            active_rms_dbfs=-18.0,
+    """The digest is built from literal metrics, not from measured audio.
+
+    Rendering and measuring are separate concerns, and a synthesized WAV cannot hit an exact
+    `-33.84` to prove a format string. These tests state the numbers and read the text.
+    """
+
+    def _metrics(
+        self,
+        *,
+        duration_s: float = 2.0,
+        peak_dbfs: float = -6.0,
+        clip_ratio: float = 0.0,
+        active_rms_dbfs: float = -18.0,
+        flags: tuple[str, ...] = (),
+    ) -> QualityMetrics:
+        return QualityMetrics(
+            duration_s=duration_s,
+            peak_dbfs=peak_dbfs,
+            clip_ratio=clip_ratio,
+            active_rms_dbfs=active_rms_dbfs,
             leading_silence_s=0.0,
             trailing_silence_s=0.0,
             silence_ratio=0.0,
-            flags=(),
+            flags=flags,
         )
-        return QualityMetrics(**{**base, **overrides})  # type: ignore[arg-type]
 
     def test_tally_counts_clean_and_flagged(self) -> None:
         digest = render_digest(
