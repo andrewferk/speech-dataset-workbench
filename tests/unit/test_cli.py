@@ -14,8 +14,18 @@ from sdw.cli import main
 
 @pytest.fixture
 def data_in(tmp_path: Path) -> Path:
+    # A minimally-valid input: one recordings.csv row pointing at one Original. Ingest hashes the
+    # bytes without decoding (#24), so any file contents suffice here — the WAV decode gate is a
+    # later stage (ADR-0005). This keeps the CLI tests about the arg surface and exit codes, not
+    # ingest details, while satisfying the recordings.csv requirement preflight now enforces.
     d = tmp_path / "data-in"
     d.mkdir()
+    (d / "a.wav").write_bytes(b"an original's bytes")
+    (d / "recordings.csv").write_text(
+        "path,speaker_id,session_id,prompt_text,device,environment\n"
+        "a.wav,spk_a,sess_1,Hello there.,mic,quiet room\n",
+        encoding="utf-8",
+    )
     return d
 
 

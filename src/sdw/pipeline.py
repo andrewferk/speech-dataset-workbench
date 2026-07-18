@@ -1,14 +1,17 @@
 """The two commands' internals.
 
-Stubs for now: they hold the shape (a pure function of `--data-in` plus config) and the
-hard-error contract, and nothing else. The stages themselves — ingest, normalization, quality,
-splitting, manifest, images — land in later tickets.
+Mostly stubs still: they hold the shape (a pure function of `--data-in` plus config) and the
+hard-error contract. Preflight now runs the first real stage — ingest, which reads
+`recordings.csv`, resolves the Originals, and derives their identity (#24). The remaining stages —
+normalization, quality, splitting, manifest, images — land in later tickets.
 """
 
 from pathlib import Path
 
+from sdw import ingest
 from sdw.config import Config, load_config
 from sdw.errors import HardError
+from sdw.ingest import Recording
 
 
 def _check_paths(data_in: Path, config: Path | None) -> None:
@@ -18,15 +21,19 @@ def _check_paths(data_in: Path, config: Path | None) -> None:
         raise HardError(f"--config is not a file: {config}")
 
 
-def _preflight(data_in: Path, config: Path | None) -> Config:
-    """Path and config checks shared by both commands.
+def _preflight(data_in: Path, config: Path | None) -> tuple[Config, list[Recording]]:
+    """Path checks, config loading, and ingest — everything both commands share.
 
     Config loading — including split-ratio validation (ADR-0004/0007, #23) — happens here so
     that `validate` aborts on an illegal ratio too. If it lived in the splitter (a later stage
-    than `validate` reaches), a green preflight could not promise a hard-error-free `build`.
+    than `validate` reaches), a green preflight could not promise a hard-error-free `build`. Ingest
+    runs here for the same reason: `recordings.csv` structural failures (#24) must abort `validate`,
+    not just `build`. Config is loaded first so a bad ratio aborts before any file is read.
     """
     _check_paths(data_in, config)
-    return load_config(config)
+    resolved = load_config(config)
+    recordings = ingest.read_recordings(data_in)
+    return resolved, recordings
 
 
 def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
