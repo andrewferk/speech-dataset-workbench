@@ -24,16 +24,28 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
-def test_build_exits_zero(tmp_path: Path) -> None:
+def _minimal_data_in(tmp_path: Path) -> Path:
+    # A minimally-valid --data-in: one recordings.csv row pointing at one Original. Ingest hashes
+    # the bytes without decoding (#24), so the file contents are unconstrained here.
     data_in = tmp_path / "in"
     data_in.mkdir()
+    (data_in / "a.wav").write_bytes(b"an original's bytes")
+    (data_in / "recordings.csv").write_text(
+        "path,speaker_id,session_id,prompt_text,device,environment\n"
+        "a.wav,spk_a,sess_1,Hello there.,mic,quiet room\n",
+        encoding="utf-8",
+    )
+    return data_in
+
+
+def test_build_exits_zero(tmp_path: Path) -> None:
+    data_in = _minimal_data_in(tmp_path)
     result = run("build", "--data-in", str(data_in), "--data-out", str(tmp_path / "out"))
     assert result.returncode == 0, result.stderr
 
 
 def test_validate_exits_zero(tmp_path: Path) -> None:
-    data_in = tmp_path / "in"
-    data_in.mkdir()
+    data_in = _minimal_data_in(tmp_path)
     result = run("validate", "--data-in", str(data_in))
     assert result.returncode == 0, result.stderr
 
