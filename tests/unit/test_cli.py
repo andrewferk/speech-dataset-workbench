@@ -86,6 +86,37 @@ class TestValidate:
         assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
 
 
+class TestConfigContract:
+    """An illegal split ratio is a hard error on *both* commands (#23, ADR-0004/0007).
+
+    The point of moving ratio validation into config loading is that `validate` — which never
+    reaches the splitter — still catches it, so a green preflight promises a `build` that will
+    not hard-error on config.
+    """
+
+    @pytest.fixture
+    def bad_ratio(self, tmp_path: Path) -> Path:
+        path = tmp_path / "bad.toml"
+        path.write_text("[split]\ntrain = 0.5\nval = 0.1\ntest = 0.1\n")
+        return path
+
+    def test_validate_rejects_an_illegal_ratio(self, data_in: Path, bad_ratio: Path) -> None:
+        assert main(["validate", "--data-in", str(data_in), "--config", str(bad_ratio)]) != 0
+
+    def test_build_rejects_an_illegal_ratio(
+        self, data_in: Path, data_out: Path, bad_ratio: Path
+    ) -> None:
+        argv = ["build", "--data-in", str(data_in), "--data-out", str(data_out)]
+        assert main([*argv, "--config", str(bad_ratio)]) != 0
+
+    def test_validate_writes_nothing_on_a_bad_config(
+        self, data_in: Path, bad_ratio: Path, tmp_path: Path
+    ) -> None:
+        before = sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))
+        assert main(["validate", "--data-in", str(data_in), "--config", str(bad_ratio)]) != 0
+        assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
+
+
 class TestUsage:
     def test_no_subcommand_is_a_usage_error(self) -> None:
         with pytest.raises(SystemExit) as exc:
