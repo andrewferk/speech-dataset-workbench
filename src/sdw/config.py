@@ -47,7 +47,12 @@ class ManifestConfig:
 
 @dataclass(frozen=True)
 class QualityConfig:
-    """``[quality]`` (ADR-0007) — the four advisory-flag thresholds; all fold into the preimage."""
+    """``[quality]`` (ADR-0007) — the four quality knobs; all fold into the preimage.
+
+    Three of the four gate an advisory flag (``low_volume``, and duration min/max →
+    ``duration_out_of_range``); ``silence_threshold_dbfs`` gates the silence *measurement*, which
+    is report-only and raises no flag. The v0.1 flag vocabulary is exactly three (ADR-0007).
+    """
 
     silence_threshold_dbfs: float = -40.0
     low_volume_rms_dbfs: float = -30.0
