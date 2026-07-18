@@ -4,23 +4,31 @@ The pipeline behind them is a stub in this ticket, so these tests pin the parse 
 exit-code contract only — never what a build produces.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
 
 from sdw.cli import main
+from tests import synth
 
 
 @pytest.fixture
 def data_in(tmp_path: Path) -> Path:
-    # A minimally-valid input: one recordings.csv row pointing at one Original. Ingest hashes the
-    # bytes without decoding (#24), so any file contents suffice here — the WAV decode gate is a
-    # later stage (ADR-0005). This keeps the CLI tests about the arg surface and exit codes, not
-    # ingest details, while satisfying the recordings.csv requirement preflight now enforces.
+    # A minimally-valid input: one recordings.csv row pointing at one Original. The Original is a
+    # real decodable WAV because normalization now decodes every listed file and a decode failure
+    # aborts (#25, ADR-0005). These tests still pin only the arg surface and exit codes.
     d = tmp_path / "data-in"
     d.mkdir()
-    (d / "a.wav").write_bytes(b"an original's bytes")
+    synth.write_wav(
+        d / "a.wav",
+        freq_hz=400.0,
+        amp_dbfs=-18.0,
+        duration_s=0.5,
+        sample_rate=16000,
+        bit_depth=16,
+        channels=1,
+    )
     (d / "recordings.csv").write_text(
         "path,speaker_id,session_id,prompt_text,device,environment\n"
         "a.wav,spk_a,sess_1,Hello there.,mic,quiet room\n",
@@ -94,6 +102,36 @@ class TestValidate:
         before = sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))
         assert main(["validate", "--data-in", str(data_in)]) == 0
         assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
+
+
+class TestDecodeGate:
+    """An undecodable Original aborts *both* commands (#25, ADR-0005).
+
+    Normalization is where ADR-0005's ingest gate actually fires, and it runs in `validate` too:
+    a green `validate` promises `build` will not hit a hard error, so both must abort on the same
+    input. The abort leaves no durable output — a Dataset Version always stands for the whole
+    intended input, never a silent subset.
+    """
+
+    @pytest.fixture
+    def undecodable(self, data_in: Path) -> Path:
+        synth.write_non_wav(data_in / "a.wav")
+        return data_in
+
+    def test_build_aborts(self, undecodable: Path, data_out: Path) -> None:
+        assert main(["build", "--data-in", str(undecodable), "--data-out", str(data_out)]) != 0
+        assert not data_out.exists()
+
+    def test_validate_aborts(self, undecodable: Path) -> None:
+        assert main(["validate", "--data-in", str(undecodable)]) != 0
+
+    @pytest.mark.parametrize("write", [synth.write_truncated_wav, synth.write_zero_frame_wav])
+    def test_corrupt_and_empty_originals_abort_too(
+        self, data_in: Path, data_out: Path, write: Callable[[Path], None]
+    ) -> None:
+        write(data_in / "a.wav")
+        assert main(["build", "--data-in", str(data_in), "--data-out", str(data_out)]) != 0
+        assert not data_out.exists()
 
 
 class TestConfigContract:

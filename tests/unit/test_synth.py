@@ -131,6 +131,13 @@ class TestAbortInputs:
         with pytest.raises(sf.SoundFileError):  # ...but soundfile cannot decode it
             sf.read(path)
 
+    def test_truncated_wav_does_not_decode(self, tmp_path: Path) -> None:
+        path = tmp_path / "cut_short.wav"
+        synth.write_truncated_wav(path)
+        assert path.read_bytes().startswith(b"RIFF")  # a real WAV's opening bytes...
+        with pytest.raises(sf.SoundFileError):  # ...cut off mid-header, so the decode fails
+            sf.read(path)
+
     def test_zero_frame_wav_is_valid_but_empty(self, tmp_path: Path) -> None:
         path = tmp_path / "empty.wav"
         synth.write_zero_frame_wav(path)

@@ -11,6 +11,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from tests import synth
+
 REPO_ROOT = Path(__file__).parents[2]
 
 
@@ -25,11 +27,19 @@ def run(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 def _minimal_data_in(tmp_path: Path) -> Path:
-    # A minimally-valid --data-in: one recordings.csv row pointing at one Original. Ingest hashes
-    # the bytes without decoding (#24), so the file contents are unconstrained here.
+    # A minimally-valid --data-in: one recordings.csv row pointing at one real WAV. It has to
+    # decode — normalization runs in both commands and a decode failure aborts (#25, ADR-0005).
     data_in = tmp_path / "in"
     data_in.mkdir()
-    (data_in / "a.wav").write_bytes(b"an original's bytes")
+    synth.write_wav(
+        data_in / "a.wav",
+        freq_hz=400.0,
+        amp_dbfs=-18.0,
+        duration_s=0.5,
+        sample_rate=16000,
+        bit_depth=16,
+        channels=1,
+    )
     (data_in / "recordings.csv").write_text(
         "path,speaker_id,session_id,prompt_text,device,environment\n"
         "a.wav,spk_a,sess_1,Hello there.,mic,quiet room\n",

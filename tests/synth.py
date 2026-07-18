@@ -17,6 +17,7 @@ inputs build on it.
 from __future__ import annotations
 
 import csv
+import io
 from dataclasses import dataclass
 from pathlib import Path
 from typing import cast
@@ -179,6 +180,18 @@ def write_non_wav(path: Path) -> None:
 def write_zero_frame_wav(path: Path) -> None:
     """Write a structurally valid WAV with a header but zero frames: nothing to ingest."""
     sf.write(path, np.zeros(0, dtype=np.float64), 16000, subtype=_SUBTYPE[16])
+
+
+def write_truncated_wav(path: Path, *, keep_bytes: int = 20) -> None:
+    """Write the first ``keep_bytes`` of a real WAV: a header cut mid-chunk, so the decode fails.
+
+    Truncating inside the ``fmt `` chunk (the default) is what makes this a *decode* failure rather
+    than a short-but-readable file: libsndfile happily reads a file whose *data* chunk is short, so
+    lopping off the tail would not exercise the abort path (ADR-0005).
+    """
+    buffer = io.BytesIO()
+    sf.write(buffer, np.zeros(16000, dtype=np.float64), 16000, subtype=_SUBTYPE[16], format="WAV")
+    path.write_bytes(buffer.getvalue()[:keep_bytes])
 
 
 # --- The committed reference --data-in (ADR-0008) --------------------------------------------
