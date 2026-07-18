@@ -163,10 +163,13 @@ class TestDeduplication:
         )
         with pytest.raises(HardError) as exc:
             read_recordings(data_in)
-        # The abort names the conflict so the operator can find it.
+        # ADR-0013: the abort names both paths, the shared recording_id, and the disagreeing field,
+        # so the operator can find the conflict.
         message = str(exc.value)
         assert "session_id" in message
         assert "a.wav" in message and "b.wav" in message
+        recording_id = f"rec_{hashlib.sha256(b'same-bytes').hexdigest()[:16]}"
+        assert recording_id in message
 
     @pytest.mark.parametrize(
         ("field", "row_a", "row_b"),
@@ -177,7 +180,7 @@ class TestDeduplication:
             ("environment", "spk,s,Hi.,mic,quiet", "spk,s,Hi.,mic,loud"),
         ],
     )
-    def test_any_identity_field_conflict_aborts(
+    def test_any_agreement_field_conflict_aborts(
         self, tmp_path: Path, field: str, row_a: str, row_b: str
     ) -> None:
         data_in = tmp_path / "in"

@@ -11,12 +11,14 @@ Three facts pin the shape:
 - **Identity is content, not the row.** ``recording_id``/``content_hash`` hash the Original file
   *bytes* and ``prompt_id`` hashes the normalized Prompt *text* (ADR-0001), so byte-identical
   Originals collapse to one Recording and the same Prompt deduplicates across Sessions. Nothing
-  here decodes the audio — decodability is the normalization stage's gate (ADR-0005), a later
-  ticket; this stage only reads bytes.
+  here decodes the audio: this stage only reads bytes. ADR-0005 frames decodability as *the ingest
+  gate*, but the actual decode lands in normalization — a later ticket — which both ``build`` and
+  ``validate`` reach, so the gate still fires; it simply is not this stage. This stage's "ingest"
+  is narrower than ADR-0005's: parse, resolve, identify.
 
 - **``--data-in`` is the operator's drop, not something the tool polices.** Files present under
-  ``--data-in`` but absent from the CSV are silently ignored — the CSV is the authority on what is
-  in the corpus, so there is nothing to warn about (#24).
+  ``--data-in`` but absent from the CSV are silently ignored — the CSV, not the directory, is the
+  authority on which Originals make up the Dataset, so there is nothing to warn about (#24).
 
 - **Byte-identical Originals with conflicting metadata abort.** Two rows whose Originals hash the
   same collapse to one ``recording_id`` and one audio path; if they disagree on any manifest-bearing

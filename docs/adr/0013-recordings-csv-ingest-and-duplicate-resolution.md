@@ -7,6 +7,13 @@ This builds on ADR-0001 (identifiers), ADR-0002 (stateless `--data-in` → `--da
 (WAV-only ingest gate), and ADR-0006 (manifest fields); it does not reopen them, only makes their
 ingest consequences concrete.
 
+**Relationship to ADR-0005 (flagged per `docs/agents/domain.md`).** ADR-0005 calls decodability
+"the ingest gate." This stage does **not** decode — it parses, resolves paths, and hashes bytes.
+That is not a relocation or a softening of ADR-0005's gate: the decode still happens, in the
+normalization stage (a later ticket), which **both** `build` and `validate` reach, so a
+non-decodable WAV still aborts. What this ADR narrows is the word "ingest" — here it means parse +
+resolve + identify, a strictly earlier stage than the decode gate, not a competing one.
+
 ## Decisions
 
 ### The index — one fixed-name CSV, RFC-4180, the exact six columns
@@ -25,11 +32,11 @@ ingest consequences concrete.
   so a `--data-in` set stays self-contained and portable — it can be moved or copied whole and every
   Original still resolves. A backslash aborts as non-POSIX (on POSIX it is a literal filename byte,
   so a Windows separator would not resolve as intended).
-- A listed Original that is **not on disk aborts** — the CSV is a claim about the corpus, and a
-  broken claim is structural, not advisory.
+- A listed Original that is **not on disk aborts** — the CSV is a claim about the Dataset's
+  contents, and a broken claim is structural, not advisory.
 - Files present under `--data-in` but **absent from the CSV are silently ignored** — not an error,
   not a warning. `--data-in` is the operator's external drop; the CSV, not the directory, is the
-  authority on what the corpus contains.
+  authority on which Originals make up the Dataset.
 
 ### Identity — content-derived, hashing bytes and text
 
@@ -66,7 +73,7 @@ resolves this.
   defers an unanswerable question to the operator after the fact; a hard abort surfaces it up front,
   consistent with the stateless "abort with no durable output" contract (ADR-0002/0003).
 - **Aborting on *every* duplicate, even agreeing ones** — contradicts ADR-0001's byte-identical
-  collapse and would reject a corpus that merely lists the same take under two paths.
+  collapse and would reject a Dataset that merely lists the same Original under two paths.
 - **Treating an unexpected extra column as advisory** — a mis-named required column would then be
   dropped silently and its metadata would vanish from the Manifest; strict is safer.
 - **Policing `--data-in` for files missing from the CSV** — the drop is the operator's; the CSV is
