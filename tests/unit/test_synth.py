@@ -131,6 +131,13 @@ class TestAbortInputs:
         with pytest.raises(sf.SoundFileError):  # ...but soundfile cannot decode it
             sf.read(path)
 
+    def test_wrong_container_decodes_but_is_not_a_wav(self, tmp_path: Path) -> None:
+        path = tmp_path / "actually_flac.wav"
+        synth.write_wrong_container(path)
+        info = sf.info(path)
+        assert info.format == "FLAC"  # decodable, and decidedly not a WAV
+        assert info.frames == 16000
+
     def test_truncated_wav_does_not_decode(self, tmp_path: Path) -> None:
         path = tmp_path / "cut_short.wav"
         synth.write_truncated_wav(path)

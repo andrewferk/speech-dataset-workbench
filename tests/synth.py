@@ -182,6 +182,15 @@ def write_zero_frame_wav(path: Path) -> None:
     sf.write(path, np.zeros(0, dtype=np.float64), 16000, subtype=_SUBTYPE[16])
 
 
+def write_wrong_container(path: Path) -> None:
+    """Write a FLAC to a ``.wav``-named file: decodable, but not a WAV.
+
+    The sharpest case for the WAV-only contract (ADR-0005) — libsndfile decodes this happily, so
+    only a container check rejects it. The name is what lies; the bytes are honest FLAC.
+    """
+    sf.write(path, np.zeros(16000, dtype=np.float64), 16000, format="FLAC", subtype=_SUBTYPE[16])
+
+
 def write_truncated_wav(path: Path, *, keep_bytes: int = 20) -> None:
     """Write the first ``keep_bytes`` of a real WAV: a header cut mid-chunk, so the decode fails.
 

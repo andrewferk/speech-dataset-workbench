@@ -16,13 +16,7 @@ import pytest
 import soundfile as sf
 
 from sdw.errors import HardError
-from sdw.normalize import (
-    TARGET_CHANNELS,
-    TARGET_SAMPLE_RATE,
-    TARGET_SUBTYPE,
-    normalize,
-    write_normalized,
-)
+from sdw.normalize import TARGET_SAMPLE_RATE, TARGET_SUBTYPE, normalize, write_normalized
 from tests import synth
 
 # A level parked well clear of full scale and of the quality knobs, and an integer number of tone
@@ -58,7 +52,6 @@ def _rms(samples: np.ndarray) -> float:
 class TestTarget:
     def test_constants_are_the_asr_convention(self) -> None:
         assert TARGET_SAMPLE_RATE == 16000
-        assert TARGET_CHANNELS == 1
         assert TARGET_SUBTYPE == "PCM_16"
 
     def test_samples_are_mono_float64_at_16k(self, tmp_path: Path) -> None:
@@ -183,14 +176,14 @@ class TestOriginalTap:
         # A measurement tap, not a second decode: normalizing opens the Original exactly once.
         original = _original(tmp_path / "a.wav", sample_rate=48000)
         opened = []
-        real_read = sf.read
+        real_open = sf.SoundFile
 
-        def counting_read(file, *args, **kwargs):  # type: ignore[no-untyped-def]
+        def counting_open(file, *args, **kwargs):  # type: ignore[no-untyped-def]
             opened.append(file)
-            return real_read(file, *args, **kwargs)
+            return real_open(file, *args, **kwargs)
 
         with pytest.MonkeyPatch.context() as patch:
-            patch.setattr("sdw.normalize.sf.read", counting_read)
+            patch.setattr("sdw.normalize.sf.SoundFile", counting_open)
             normalize(original)
         assert len(opened) == 1
 
@@ -202,6 +195,21 @@ class TestDecodeGate:
         synth.write_non_wav(tmp_path / "a.wav")
         with pytest.raises(HardError, match="cannot decode"):
             normalize(tmp_path / "a.wav")
+
+    def test_a_decodable_non_wav_aborts(self, tmp_path: Path) -> None:
+        # v0.1 ingests WAV only, so decodability alone is not enough: a FLAC under a `.wav` name
+        # decodes fine and is still rejected (ADR-0005).
+        synth.write_wrong_container(tmp_path / "a.wav")
+        with pytest.raises(HardError, match="not a WAV"):
+            normalize(tmp_path / "a.wav")
+
+    def test_a_float_subtype_wav_is_accepted(self, tmp_path: Path) -> None:
+        # The gate is the container, not the subtype: a float WAV is a normal export, and it is
+        # a WAV, so it is data. It normalizes to the same float64 as any other Original.
+        path = tmp_path / "a.wav"
+        tone, _ = sf.read(_original(tmp_path / "tone.wav"), dtype="float64")
+        sf.write(path, tone, 16000, subtype="FLOAT")
+        assert normalize(path).samples == pytest.approx(tone, abs=1e-7)
 
     def test_truncated_wav_aborts(self, tmp_path: Path) -> None:
         synth.write_truncated_wav(tmp_path / "a.wav")

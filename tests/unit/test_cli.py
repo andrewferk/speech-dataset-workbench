@@ -1,7 +1,9 @@
 """The CLI argument surface: what `build` and `validate` accept, and what they exit with.
 
-The pipeline behind them is a stub in this ticket, so these tests pin the parse and the
-exit-code contract only — never what a build produces.
+These tests pin the parse and the exit-code contract — never what a build produces. The one
+pipeline behavior asserted here is the mapping from a stage's hard error to an exit code, which
+is a property of this surface: `TestDecodeGate` and `TestConfigContract` check that both commands
+abort on the same input, since a green `validate` is a promise about `build`.
 """
 
 from collections.abc import Callable, Iterator
@@ -113,25 +115,31 @@ class TestDecodeGate:
     intended input, never a silent subset.
     """
 
-    @pytest.fixture
-    def undecodable(self, data_in: Path) -> Path:
-        synth.write_non_wav(data_in / "a.wav")
-        return data_in
+    # Every input ADR-0005 names as a structural failure, against both commands.
+    BAD_ORIGINALS = [
+        pytest.param(synth.write_non_wav, id="non-wav"),
+        pytest.param(synth.write_wrong_container, id="decodable-but-not-wav"),
+        pytest.param(synth.write_truncated_wav, id="truncated"),
+        pytest.param(synth.write_zero_frame_wav, id="zero-frame"),
+    ]
 
-    def test_build_aborts(self, undecodable: Path, data_out: Path) -> None:
-        assert main(["build", "--data-in", str(undecodable), "--data-out", str(data_out)]) != 0
-        assert not data_out.exists()
-
-    def test_validate_aborts(self, undecodable: Path) -> None:
-        assert main(["validate", "--data-in", str(undecodable)]) != 0
-
-    @pytest.mark.parametrize("write", [synth.write_truncated_wav, synth.write_zero_frame_wav])
-    def test_corrupt_and_empty_originals_abort_too(
+    @pytest.mark.parametrize("write", BAD_ORIGINALS)
+    def test_build_aborts_with_no_durable_output(
         self, data_in: Path, data_out: Path, write: Callable[[Path], None]
     ) -> None:
         write(data_in / "a.wav")
         assert main(["build", "--data-in", str(data_in), "--data-out", str(data_out)]) != 0
         assert not data_out.exists()
+
+    @pytest.mark.parametrize("write", BAD_ORIGINALS)
+    def test_validate_aborts_on_the_same_inputs(
+        self, data_in: Path, tmp_path: Path, write: Callable[[Path], None]
+    ) -> None:
+        write(data_in / "a.wav")
+        before = sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*"))
+        assert main(["validate", "--data-in", str(data_in)]) != 0
+        # Aborting is still writing nothing, anywhere (ADR-0002) — not even a partial artifact.
+        assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
 
 
 class TestConfigContract:

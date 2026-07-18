@@ -37,10 +37,15 @@ import soxr
 from sdw.errors import HardError
 
 # The canonical target: the near-universal ASR/dataset convention (ADR-0005). Constants, not
-# config — see the module docstring.
+# config — see the module docstring. Mono is the third leg of the target and has no constant
+# because it is not a parameter of anything: it is the shape `samples` always has.
 TARGET_SAMPLE_RATE = 16000
-TARGET_CHANNELS = 1
 TARGET_SUBTYPE = "PCM_16"
+
+# The libsndfile container formats that count as "a WAV". WAVEX (extensible) and RF64 (the >4 GB
+# variant) are RIFF WAV files, so all three satisfy ADR-0005's WAV-only contract; a FLAC or OGG
+# carrying a `.wav` name does not, even though libsndfile would happily decode it.
+_WAV_FORMATS = frozenset({"WAV", "WAVEX", "RF64"})
 
 # python-soxr's quality setting. "HQ" is soxr's default-quality band-limited resampler; ADR-0005
 # picked it over `scipy.signal.resample_poly` on quality, accepting libsoxr's LGPL.
@@ -51,8 +56,10 @@ RESAMPLE_QUALITY = "HQ"
 class NormalizedAudio:
     """One Original decoded, plus its Normalized form — the whole seam this stage exposes.
 
-    ``samples`` is the Normalized audio: mono float64 at :data:`TARGET_SAMPLE_RATE`, ready for
-    :func:`write_normalized`. ``original`` is the decoded Original exactly as it came off disk —
+    ``samples`` is the Normalized audio: mono float64 at ``sample_rate``, which is always
+    :data:`TARGET_SAMPLE_RATE` — it is carried on the instance rather than read from the constant so
+    that the samples and the rate a writer stamps into the header can never drift apart.
+    ``original`` is the decoded Original exactly as it came off disk —
     float64, native sample rate, shape ``(frames,)`` when mono and ``(frames, channels)`` otherwise
     — for the clipping tap. It is float64 rather than the file's integer codes so that every
     consumer measures on one scale (-1.0 to 1.0) regardless of the Original's bit depth.
@@ -84,21 +91,33 @@ def write_normalized(audio: NormalizedAudio, path: Path) -> None:
     libsndfile's float-to-PCM_16 conversion is deterministic round-to-nearest with no dither
     (ADR-0005), so the same samples always produce the same bytes on a given build.
     """
-    sf.write(path, audio.samples, TARGET_SAMPLE_RATE, subtype=TARGET_SUBTYPE)
+    sf.write(path, audio.samples, audio.sample_rate, subtype=TARGET_SUBTYPE)
 
 
 def _decode(path: Path) -> tuple[npt.NDArray[np.float64], int]:
     """Read the Original to float64, or abort.
 
-    Decodability is the gate: soundfile refusing the file — because it is not WAV, or is corrupt or
-    truncated — is a structural error, as is a WAV that decodes to zero frames (a header with no
-    audio behind it). Either aborts the run rather than letting a Dataset Version quietly stand for
-    a subset of the intended input (ADR-0005).
+    Three ways this aborts, all structural: soundfile refuses the file (it is not audio at all, or
+    is a corrupt or truncated WAV), it decodes but is not a WAV container (v0.1 ingests WAV only —
+    a FLAC wearing a ``.wav`` name is not an Original the tool accepts), or it is a WAV whose header
+    describes zero frames. Any of them aborts the run rather than letting a Dataset Version quietly
+    stand for a subset of the intended input (ADR-0005).
+
+    The container check is deliberately about the container and not the subtype: ADR-0005's abort
+    list is "not WAV / corrupt / truncated / zero-frame", so a float-subtype WAV — a normal DAW
+    export — is data, and decodes to the same float64 as any other.
     """
+    # One open, not `sf.info` then `sf.read`: the header check and the decode must see the same
+    # file, and the decoded samples are the clipping tap's only read of it.
     try:
-        samples, sample_rate = sf.read(path, dtype="float64", always_2d=False)
+        with sf.SoundFile(path) as handle:
+            container = handle.format
+            sample_rate = int(handle.samplerate)
+            samples: npt.NDArray[np.float64] = handle.read(dtype="float64", always_2d=False)
     except (sf.LibsndfileError, OSError) as error:
         raise HardError(f"cannot decode Original as WAV: {path} ({error})") from error
+    if container not in _WAV_FORMATS:
+        raise HardError(f"Original is not a WAV (libsndfile reports {container}): {path}")
     if len(samples) == 0:
         raise HardError(f"Original decodes to zero frames: {path}")
     return samples, int(sample_rate)
