@@ -110,8 +110,14 @@ decode failure" is not a flag here — it is ADR-0005/#11's hard abort.
   ```
 
 - **`reports/summary.txt`** (written by `build`, quality section) — the human **quality digest**: a
-  per-flag tally plus one line per flagged Recording (clean ones omitted). Deterministic, no
-  wall-clock.
+  per-flag tally plus one line per **(Recording, flag)** pair (clean Recordings omitted).
+  Deterministic, no wall-clock.
+
+  A Recording carrying two flags therefore gets two lines, because the evidence a line states is
+  *per flag* — a combined line would have to concatenate two unrelated sets of numbers, and the
+  `flag` column would stop being one value wide. The tally lists all three flags even at zero, so
+  the digest has one fixed shape and an operator diffing two runs sees a count change rather than a
+  line appear; only the `Flagged:` list is elided when empty (#26).
 
   ```
   Quality: 42 recordings — 37 clean, 5 flagged
