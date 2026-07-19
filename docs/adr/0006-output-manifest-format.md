@@ -23,6 +23,10 @@ ADR-0003 explicitly deferred to issue #12.
   the single atomic `build` (issue #8, ADR-0003). HF Hub publishing (dataset card, `configs` YAML,
   `push_to_hub`) is v0.2.
 
+> **Amended by #28**: the empty-Split case was unstated — the canonical manifests are emitted
+> unconditionally, the HF views only where there is audio. See *Sample order and the empty-Split
+> case* below.
+
 ### Canonical Sample line (`train/val/test.jsonl`)
 
 A superset of NeMo's required keys, emitted in this fixed key order:
@@ -117,6 +121,25 @@ Per issue #8, the same input + config + tool version must yield byte-identical a
   canonically; UTF-8, LF newlines, stable JSON separators, no trailing whitespace.
 - Sample lines ordered deterministically; `sessions` sorted by `session_id`.
 - **No timestamps, wall-clock, host, or path-outside-the-tree facts** anywhere in the durable output.
+
+> **Amended by #28**: "ordered deterministically" left the key unnamed — it is now `recording_id`,
+> ascending. See *Sample order and the empty-Split case* below.
+
+### Amended by #28 — Sample order and the empty-Split case
+
+The decisions above required Sample lines to be "ordered deterministically" without naming a key,
+and were silent on what a build emits for a Split with no Samples. Both are pinned here:
+
+- **Sample lines are ordered by `recording_id`, ascending.** A total order over a content-derived
+  id, so reordering the rows of `recordings.csv` — which changes nothing about the Dataset —
+  cannot change a byte of any manifest, and so cannot mint a new `dataset_version` (ADR-0010).
+  Session- or speaker-grouped order was available and is rejected: it would make the emitted bytes
+  depend on a grouping the consumer does not read.
+- **All three `<split>.jsonl` are always emitted; `audio/<split>/metadata.jsonl` only where there
+  is audio.** A consumer opening `test.jsonl` on a Dataset too small to fill test should read zero
+  Samples, not crash on a missing file. The HF view is asymmetric with it deliberately: no
+  `audio/<split>/` directory exists for an empty Split, so a `metadata.jsonl` there would describe
+  a folder that is not present.
 
 ## Considered and rejected
 

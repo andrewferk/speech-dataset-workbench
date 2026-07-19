@@ -151,8 +151,8 @@ def _emission_order(recordings: Sequence[Recording]) -> list[Recording]:
 
     A total order over content-derived ids, so reordering the rows of ``recordings.csv`` — which
     changes nothing about the Dataset — cannot change a single byte of the output, and so cannot
-    mint a new ``dataset_version``. The Samples are then grouped into their Splits by
-    :func:`_files`, which preserves this order within each Split.
+    mint a new ``dataset_version`` (ADR-0006, amended by #28). The Samples are then grouped into
+    their Splits by :func:`_files`, which preserves this order within each Split.
     """
     return sorted(recordings, key=lambda recording: recording.recording_id)
 
@@ -191,8 +191,8 @@ def _files(samples: Sequence[Sample]) -> dict[str, str]:
     ``test.jsonl`` on a Dataset too small to fill test should read zero Samples, not crash on a
     missing file. The HF view is emitted only where there is audio beside it — ``audio/test/`` does
     not exist when test is empty, and a ``metadata.jsonl`` describing an absent folder would be a
-    file pointing at nothing. HF reads ``val`` as a validation split already, so no Split is
-    renamed (ADR-0003/0006).
+    file pointing at nothing. The asymmetry is deliberate and pinned by ADR-0006 (amended by #28).
+    HF reads ``val`` as a validation split already, so no Split is renamed (ADR-0003/0006).
     """
     per_split = {name: [s for s in samples if s.split == name] for name in SPLIT_ORDER}
     files = {f"{name}.jsonl": _jsonl(_line(s) for s in held) for name, held in per_split.items()}
