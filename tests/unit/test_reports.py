@@ -8,6 +8,7 @@ noise.
 """
 
 import json
+from pathlib import Path
 
 from sdw.config import SplitConfig
 from sdw.ingest import Recording
@@ -17,12 +18,13 @@ from sdw.reports import (
     QUALITY_KEYS,
     SUMMARY_TXT,
     _join,
+    _overlap_note,
     _percent,
     render_quality_jsonl,
     render_summary,
     write_reports,
 )
-from sdw.split import SplitResult, split_sessions
+from sdw.split import SpeakerOverlap, SplitResult, split_sessions
 
 
 def _metrics(*, duration_s: float = 4.0, flags: tuple[str, ...] = ()) -> QualityMetrics:
@@ -166,6 +168,18 @@ class TestSpeakerOverlap:
             assert f"Speaker {overlap.speaker_id} appears in" in summary
         assert "is not speaker-independent" in summary
 
+    def test_two_splits_name_the_second_as_compromised(self) -> None:
+        """ADR-0004's own wording: "appears in train and test — test set is not …"."""
+        note = _overlap_note(SpeakerOverlap(speaker_id="spk_02", splits=("train", "test")))
+        assert note == (
+            "Speaker spk_02 appears in train and test — test set is not speaker-independent"
+        )
+
+    def test_a_speaker_spanning_all_three_compromises_more_than_the_last(self) -> None:
+        """Naming only `test` would tell an operator their validation set was clean."""
+        note = _overlap_note(SpeakerOverlap(speaker_id="spk_02", splits=("train", "val", "test")))
+        assert note.endswith("val and test sets are not speaker-independent")
+
 
 class TestMinSessionsWarning:
     """Below three Sessions the warning appears in both sections of the summary (ADR-0004)."""
@@ -211,7 +225,7 @@ class TestFormattingHelpers:
 class TestWriteReports:
     """Both artifacts land in the staging tree under their spec'd names (ADR-0003)."""
 
-    def test_writes_both_files(self, tmp_path) -> None:  # type: ignore[no-untyped-def]
+    def test_writes_both_files(self, tmp_path: Path) -> None:
         recordings = _corpus(4)
         results = [(r.recording_id, _metrics()) for r in recordings]
         directory = tmp_path / "reports"

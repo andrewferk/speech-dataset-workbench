@@ -76,7 +76,9 @@ class TestBuildWritesReports:
 class TestValidateWritesNothing:
     """`validate` prints the digest and leaves no durable artifact (ADR-0002)."""
 
-    def test_no_reports_directory_is_created(self, tmp_path: Path, capsys) -> None:  # type: ignore[no-untyped-def]
+    def test_no_reports_directory_is_created(
+        self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
         data_in = _data_in(tmp_path / "in", 3)
         assert main(["validate", "--data-in", str(data_in)]) == 0
         assert capsys.readouterr().out.startswith("Quality:")

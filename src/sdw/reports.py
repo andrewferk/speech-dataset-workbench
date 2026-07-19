@@ -35,26 +35,11 @@ from collections.abc import Sequence
 from pathlib import Path
 
 from sdw.quality import QualityMetrics, render_digest
-from sdw.split import MIN_SESSIONS_FOR_REPAIR, SPLIT_ORDER, SplitResult
+from sdw.split import MIN_SESSIONS_FOR_REPAIR, SPLIT_ORDER, SpeakerOverlap, SplitResult
 
 REPORTS_DIR = "reports"
 QUALITY_JSONL = "quality.jsonl"
 SUMMARY_TXT = "summary.txt"
-
-# The row's key order, fixed here rather than left to dict insertion so the shape is stated once and
-# a reordering is a visible diff to this tuple. `id` leads because the file is sorted by it and
-# joined on it; `flags` trails because it is the only variable-length field (ADR-0007).
-QUALITY_KEYS = (
-    "id",
-    "duration_s",
-    "peak_dbfs",
-    "clip_ratio",
-    "active_rms_dbfs",
-    "leading_silence_s",
-    "trailing_silence_s",
-    "silence_ratio",
-    "flags",
-)
 
 # Decimal places per field *type*, not per field: dBFS 2, ratios 4, seconds 3 (ADR-0007). Rounding
 # at render is what lets the file be an exact golden — two runs that agree to within a float ULP
@@ -63,15 +48,26 @@ _DBFS_DP = 2
 _RATIO_DP = 4
 _SECONDS_DP = 3
 
-_QUALITY_DP = {
-    "duration_s": _SECONDS_DP,
-    "peak_dbfs": _DBFS_DP,
-    "clip_ratio": _RATIO_DP,
-    "active_rms_dbfs": _DBFS_DP,
-    "leading_silence_s": _SECONDS_DP,
-    "trailing_silence_s": _SECONDS_DP,
-    "silence_ratio": _RATIO_DP,
-}
+# The row's numeric fields: key order *and* precision in one table, because they are one decision.
+# Two parallel structures would let a key exist with no precision beside it, and that mismatch would
+# surface as a KeyError at render time rather than as an obviously incomplete edit here. `id` leads
+# and `flags` trails around them — the file is sorted by `id` and joined on it, and `flags` is the
+# only variable-length field (ADR-0007).
+_METRIC_FIELDS = (
+    ("duration_s", _SECONDS_DP),
+    ("peak_dbfs", _DBFS_DP),
+    ("clip_ratio", _RATIO_DP),
+    ("active_rms_dbfs", _DBFS_DP),
+    ("leading_silence_s", _SECONDS_DP),
+    ("trailing_silence_s", _SECONDS_DP),
+    ("silence_ratio", _RATIO_DP),
+)
+
+QUALITY_KEYS = ("id", *(key for key, _ in _METRIC_FIELDS), "flags")
+
+# `json.dumps` defaults to `", "` and `": "`; ADR-0007's row is compact. The byte format is
+# load-bearing rather than cosmetic — the file is committed as an exact golden.
+_JSON_SEPARATORS = (",", ":")
 
 
 def write_reports(
@@ -104,7 +100,9 @@ def render_quality_jsonl(results: Sequence[tuple[str, QualityMetrics]]) -> str:
     `recordings.csv` — the same corpus described in a different row order yields the same bytes.
     """
     rows = sorted(results, key=lambda result: result[0])
-    return "".join(json.dumps(_row(rid, metrics)) + "\n" for rid, metrics in rows)
+    return "".join(
+        json.dumps(_row(rid, metrics), separators=_JSON_SEPARATORS) + "\n" for rid, metrics in rows
+    )
 
 
 def _row(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:
@@ -115,10 +113,11 @@ def _row(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:
     it. The human digest formats to fixed width for a different reason — column alignment — which
     is why the two renderings differ.
     """
-    values: dict[str, object] = {"id": recording_id, "flags": list(metrics.flags)}
-    for key, places in _QUALITY_DP.items():
-        values[key] = round(getattr(metrics, key), places)
-    return {key: values[key] for key in QUALITY_KEYS}
+    row: dict[str, object] = {"id": recording_id}
+    for key, places in _METRIC_FIELDS:
+        row[key] = round(getattr(metrics, key), places)
+    row["flags"] = list(metrics.flags)
+    return row
 
 
 # --- The human summary ---------------------------------------------------------------------------
@@ -127,14 +126,17 @@ def _row(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:
 def render_summary(results: Sequence[tuple[str, QualityMetrics]], split_result: SplitResult) -> str:
     """The operator's digest: the quality section, then the split section.
 
-    The below-three-Sessions warning appears in *both* sections rather than once at the top
-    (ADR-0004). It is a fact about the corpus that changes how either section should be read — the
-    split table's realized counts and the quality tally are both describing a corpus too small to
-    partition — and an operator scanning to the section they came for must not be able to miss it.
+    The below-three-Sessions warning appears in *both* sections rather than once (ADR-0004). It is a
+    fact about the corpus that changes how either section should be read — the split table's
+    realized counts and the quality tally are both describing a corpus too small to partition — and
+    an operator scanning to the section they came for must not be able to miss it. It is prefixed
+    here rather than passed into :func:`~sdw.quality.render_digest`, so that `validate`, which never
+    runs the splitter, cannot end up with a digest that differs from `build`'s by a parameter it has
+    no way to fill (ADR-0007).
     """
-    warning = _min_sessions_warning(split_result)
-    sections = [
-        render_digest(results, warnings=warning),
+    sections = [f"{warning}\n" for warning in _min_sessions_warning(split_result)]
+    sections += [
+        render_digest(results),
         "\n".join(_split_section(split_result)) + "\n",
     ]
     return "\n".join(sections)
@@ -177,12 +179,26 @@ def _split_section(split_result: SplitResult) -> list[str]:
         ]
     if split_result.speaker_overlaps:
         lines.append("")
-        lines += [
-            f"Speaker {overlap.speaker_id} appears in {_join(overlap.splits)} — "
-            f"{overlap.splits[-1]} set is not speaker-independent"
-            for overlap in split_result.speaker_overlaps
-        ]
+        lines += [_overlap_note(overlap) for overlap in split_result.speaker_overlaps]
     return lines
+
+
+def _overlap_note(overlap: SpeakerOverlap) -> str:
+    """ "Speaker spk_02 appears in train and test — test set is not speaker-independent" (ADR-0004).
+
+    Every Split *after the first* is named as compromised, not just the last one. A Speaker spanning
+    all three leaks into val and test alike, and naming only `test` would tell an operator their
+    validation set was clean when it is not. The first Split is the reference the others fail to be
+    independent *of* — arbitrary between any two, but :data:`~sdw.split.SPLIT_ORDER` makes the
+    choice total and stable, and it lands on `train`, which is the one nobody expects to be held
+    out anyway.
+    """
+    compromised = overlap.splits[1:]
+    plural = "s are" if len(compromised) > 1 else " is"
+    return (
+        f"Speaker {overlap.speaker_id} appears in {_join(overlap.splits)} — "
+        f"{_join(compromised)} set{plural} not speaker-independent"
+    )
 
 
 def _split_table(split_result: SplitResult) -> list[str]:
