@@ -60,9 +60,7 @@ class TestBuildWritesReports:
 
         reports = data_out / REPORTS_DIR
         assert (reports / SUMMARY_TXT).is_file()
-        lines = [
-            json.loads(text) for text in (reports / QUALITY_JSONL).read_text().splitlines()
-        ]
+        lines = [json.loads(text) for text in (reports / QUALITY_JSONL).read_text().splitlines()]
         assert len(lines) == 4
         assert [line["id"] for line in lines] == sorted(line["id"] for line in lines)
 
