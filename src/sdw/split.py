@@ -8,7 +8,7 @@ to explain that to an operator.
 Three facts pin the shape:
 
 - **The unit is the Session and the grouping is not a knob.** A whole Session lands in exactly one
-  split, so a Prompt re-read within a sitting can never straddle train and test. The guarantee is
+  Split, so a Prompt re-read within a sitting can never straddle train and test. The guarantee is
   session-level, not speaker-level: v0.1 data is single-speaker, and one Speaker cannot fill three
   disjoint splits. A Speaker recurring across splits is therefore expected — surfaced as a
   disclosure when there is more than one Speaker, never as a change to the partition.
@@ -16,7 +16,7 @@ Three facts pin the shape:
 - **The targets are absolute Sample counts, computed once.** ``N`` is known before the walk
   begins, so ``target_i = ratio_i x N`` and ``deficit_i = target_i - assigned_i`` are total-order
   stable from the very first Session, with no ``0/0`` special case. Deficits stay floats and go
-  **negative** on overshoot — deliberately, so an overshot split stops attracting Sessions. The
+  **negative** on overshoot — deliberately, so an overshot Split stops attracting Sessions. The
   deficit is never redefined against Samples-assigned-so-far, and never rounded.
 
 - **Nothing here is a decision the tool makes twice.** Order is ``sha256("<seed>:<session_id>")``,
@@ -69,7 +69,7 @@ class RepairMove:
 
 @dataclass(frozen=True)
 class SpeakerOverlap:
-    """One Speaker appearing in more than one split — report-only, and never blocking.
+    """One Speaker appearing in more than one Split — report-only, and never blocking.
 
     Emitted only when the Dataset has more than one distinct Speaker: on single-speaker data,
     which is v0.1's expected shape, the overlap is unavoidable and the note would fire on every
@@ -87,6 +87,12 @@ class SplitResult:
     ``targets`` beside ``samples`` is the ratio disclosure's whole substance: an operator who
     configures 80-10-10 and receives 50-25-25 is looking at arithmetic — whole Sessions are
     indivisible — and both numbers being present lets them draw that conclusion themselves.
+
+    ``empty_splits`` and ``below_min_sessions`` are two different facts and the warning that
+    renders them is not the same warning. An empty Split with three or more Sessions would mean
+    the repair failed to buy a promise the tool made; below three it means a three-way split was
+    never arithmetically available. Collapsing them would leave #10 unable to tell the operator
+    which of those happened — and only one of them is about their data.
     """
 
     assignments: dict[str, str]
@@ -99,14 +105,15 @@ class SplitResult:
     moves: tuple[RepairMove, ...]
     speaker_overlaps: tuple[SpeakerOverlap, ...]
     empty_splits: tuple[str, ...]
+    below_min_sessions: bool
 
     def split_of(self, recording: Recording) -> str:
-        """The split this Recording's Sample belongs to — its Session's, by definition."""
+        """The Split this Recording's Sample belongs to — its Session's, by definition."""
         return self.assignments[recording.session_id]
 
 
 def split_sessions(recordings: Sequence[Recording], config: SplitConfig) -> SplitResult:
-    """Assign every Session to exactly one split, deterministically (ADR-0004).
+    """Assign every Session to exactly one Split, deterministically (ADR-0004).
 
     Pure: the same Recordings (in any order) and the same config always produce the same result.
     Never raises and never aborts — an input too small for three splits produces a valid partition
@@ -133,6 +140,7 @@ def split_sessions(recordings: Sequence[Recording], config: SplitConfig) -> Spli
         moves=moves,
         speaker_overlaps=_speaker_overlaps(recordings, assignments),
         empty_splits=tuple(name for name in SPLIT_ORDER if not samples[name]),
+        below_min_sessions=len(order) < MIN_SESSIONS_FOR_REPAIR,
     )
 
 
@@ -160,7 +168,7 @@ def _hash_order(sizes: dict[str, int], seed: int) -> tuple[str, ...]:
 def _water_fill(
     order: tuple[str, ...], sizes: dict[str, int], targets: dict[str, float]
 ) -> dict[str, str]:
-    """Walk the Sessions in hash order, each to the split with the maximum deficit."""
+    """Walk the Sessions in hash order, each to the Split with the maximum deficit."""
     assignments: dict[str, str] = {}
     assigned = dict.fromkeys(SPLIT_ORDER, 0)
     for session_id in order:
@@ -171,7 +179,7 @@ def _water_fill(
 
 
 def _max_deficit(targets: dict[str, float], assigned: dict[str, int]) -> str:
-    """The hungriest split; ties fall to :data:`SPLIT_ORDER`, leftmost winning.
+    """The hungriest Split; ties fall to :data:`SPLIT_ORDER`, leftmost winning.
 
     ``max`` over ``SPLIT_ORDER`` keeps the first maximum it sees, which *is* the tie-break — the
     ordering is not incidental to this line.
@@ -210,12 +218,12 @@ def _repair(
 def _donor(
     assignments: dict[str, str], sizes: dict[str, int], targets: dict[str, float]
 ) -> str | None:
-    """The minimum-deficit split — the largest surplus — that can spare a Session.
+    """The minimum-deficit Split — the largest surplus — that can spare a Session.
 
     Largest-surplus rather than "always train": ratios are operator-configurable, so under
     ``train = 0.2`` a fixed train donor could strip train to empty while repairing test, inverting
     the guarantee the repair exists to serve. Pigeonhole makes an eligible donor certain whenever
-    there are >= 3 Sessions and a split is empty, so ``None`` is unreachable in practice — returned
+    there are >= 3 Sessions and a Split is empty, so ``None`` is unreachable in practice — returned
     rather than asserted so a future ratio rule cannot turn a disclosure into a crash.
     """
     samples = _samples_per_split(assignments, sizes)
@@ -243,6 +251,7 @@ def _smallest_session(
 
 
 def _samples_per_split(assignments: dict[str, str], sizes: dict[str, int]) -> dict[str, int]:
+    """Samples per Split — what the ratios target, and so what a deficit is measured in."""
     counts = dict.fromkeys(SPLIT_ORDER, 0)
     for session_id, name in assignments.items():
         counts[name] += sizes[session_id]
@@ -250,6 +259,7 @@ def _samples_per_split(assignments: dict[str, str], sizes: dict[str, int]) -> di
 
 
 def _sessions_per_split(assignments: dict[str, str]) -> dict[str, int]:
+    """Sessions per Split — what the donor filter and the starvation check read."""
     counts = dict.fromkeys(SPLIT_ORDER, 0)
     for name in assignments.values():
         counts[name] += 1
@@ -259,7 +269,7 @@ def _sessions_per_split(assignments: dict[str, str]) -> dict[str, int]:
 def _speaker_overlaps(
     recordings: Sequence[Recording], assignments: dict[str, str]
 ) -> tuple[SpeakerOverlap, ...]:
-    """Speakers landing in more than one split — suppressed entirely for single-speaker data."""
+    """Speakers landing in more than one Split — suppressed entirely for single-speaker data."""
     per_speaker: dict[str, set[str]] = {}
     for recording in recordings:
         per_speaker.setdefault(recording.speaker_id, set()).add(assignments[recording.session_id])
