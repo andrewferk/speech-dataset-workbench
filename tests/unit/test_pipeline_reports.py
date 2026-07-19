@@ -41,7 +41,7 @@ def _data_in(root: Path, count: int) -> Path:
 
 
 class TestBuildWritesReports:
-    """Both artifacts land in the committed tree, one `quality.jsonl` row per Recording."""
+    """Both artifacts land in the committed tree, one `quality.jsonl` line per Recording."""
 
     def test_both_files_are_committed(self, tmp_path: Path) -> None:
         data_out = tmp_path / "out"
@@ -60,9 +60,11 @@ class TestBuildWritesReports:
 
         reports = data_out / REPORTS_DIR
         assert (reports / SUMMARY_TXT).is_file()
-        rows = [json.loads(line) for line in (reports / QUALITY_JSONL).read_text().splitlines()]
-        assert len(rows) == 4
-        assert [row["id"] for row in rows] == sorted(row["id"] for row in rows)
+        lines = [
+            json.loads(text) for text in (reports / QUALITY_JSONL).read_text().splitlines()
+        ]
+        assert len(lines) == 4
+        assert [line["id"] for line in lines] == sorted(line["id"] for line in lines)
 
     def test_summary_carries_the_split_table_on_a_clean_build(self, tmp_path: Path) -> None:
         """No threshold and no conditional — the disclosure is unconditional (ADR-0004)."""

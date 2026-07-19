@@ -97,7 +97,7 @@ def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
     staging = data_out.with_name(data_out.name + ".tmp")
     shutil.rmtree(staging, ignore_errors=True)
     try:
-        # The metrics are retained across the loop — they are the rows of `reports/quality.jsonl`
+        # The metrics are retained across the loop — they are the lines of `reports/quality.jsonl`
         # (#32) — while the audio is not, since only the renderer needs it and only while it is in
         # hand. One decode feeds both.
         measured: list[tuple[str, QualityMetrics]] = []

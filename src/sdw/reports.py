@@ -6,7 +6,7 @@ disclosures as data; neither rendered anything durable. This module is where bot
 
 Four facts pin the shape:
 
-- **Two artifacts because there are two readers.** `quality.jsonl` is one row per kept Recording,
+- **Two artifacts because there are two readers.** `quality.jsonl` is one line per kept Recording,
   sorted by `id` and joinable to the manifest on it, for a consumer that filters; `summary.txt` is
   a digest that omits clean Recordings, for an operator who wants the state of a Dataset at a
   glance. Neither is derivable from the other without work, so both are written (ADR-0007).
@@ -47,7 +47,7 @@ SUMMARY_TXT = "summary.txt"
 # render is what lets the file be an exact golden — two runs that agree to within a float ULP still
 # serialize identically, so no test needs a tolerance.
 
-# The row's numeric fields: key order *and* precision in one table, because they are one decision.
+# The line's numeric fields: key order *and* precision in one table, because they are one decision.
 # Two parallel structures would let a key exist with no precision beside it, and that mismatch would
 # surface as a KeyError at render time rather than as an obviously incomplete edit here. `id` leads
 # and `flags` trails around them — the file is sorted by `id` and joined on it, and `flags` is the
@@ -64,7 +64,7 @@ _METRIC_FIELDS = (
 
 QUALITY_KEYS = ("id", *(key for key, _ in _METRIC_FIELDS), "flags")
 
-# `json.dumps` defaults to `", "` and `": "`; ADR-0007's row is compact. The byte format is
+# `json.dumps` defaults to `", "` and `": "`; ADR-0007's line is compact. The byte format is
 # load-bearing rather than cosmetic — the file is committed as an exact golden.
 _JSON_SEPARATORS = (",", ":")
 
@@ -88,35 +88,36 @@ def write_reports(
 
 
 def render_quality_jsonl(results: Sequence[tuple[str, QualityMetrics]]) -> str:
-    """One JSON object per kept Recording, sorted by `id`, clean rows included.
+    """One JSON object per kept Recording, sorted by `id`, clean lines included.
 
-    Clean rows are present because the file is the *record* of what was measured, not a worklist:
+    Clean lines are present because the file is the *record* of what was measured, not a worklist:
     a consumer asking "was this Sample checked, and what did it measure?" must get an answer for
-    every Sample, and an absent row cannot distinguish "clean" from "never measured". `summary.txt`
+    every Sample, and an absent line cannot distinguish "clean" from "never measured". `summary.txt`
     is the worklist, and it is the one that omits them.
 
     Sorted by `id` rather than by input order so that the file is stable under a reordering of
     `recordings.csv` — the same Dataset described in a different row order yields the same bytes.
     """
-    rows = sorted(results, key=lambda result: result[0])
+    ordered = sorted(results, key=lambda result: result[0])
     return "".join(
-        json.dumps(_row(rid, metrics), separators=_JSON_SEPARATORS) + "\n" for rid, metrics in rows
+        json.dumps(_line(rid, metrics), separators=_JSON_SEPARATORS) + "\n"
+        for rid, metrics in ordered
     )
 
 
-def _row(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:
-    """One Recording's row, rounded per field type, in :data:`QUALITY_KEYS` order.
+def _line(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:
+    """One Recording's line, rounded per field type, in :data:`QUALITY_KEYS` order.
 
     ``round`` rather than fixed-decimal string formatting, because JSON has no notion of trailing
     zeros to preserve and a numeric literal keeps the field a number for any consumer that parses
     it. The human digest formats to fixed width for a different reason — column alignment — which
     is why the two renderings differ.
     """
-    row: dict[str, object] = {"id": recording_id}
+    line: dict[str, object] = {"id": recording_id}
     for key, places in _METRIC_FIELDS:
-        row[key] = round(getattr(metrics, key), places)
-    row["flags"] = list(metrics.flags)
-    return row
+        line[key] = round(getattr(metrics, key), places)
+    line["flags"] = list(metrics.flags)
+    return line
 
 
 # --- The human summary ---------------------------------------------------------------------------

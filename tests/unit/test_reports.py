@@ -68,36 +68,36 @@ def _split(recordings: list[Recording]) -> SplitResult:
 
 
 class TestQualityJsonl:
-    """One row per kept Recording, fixed key order, sorted by id (ADR-0007)."""
+    """One line per kept Recording, fixed key order, sorted by id (ADR-0007)."""
 
-    def test_one_row_per_recording_including_clean_ones(self) -> None:
+    def test_one_line_per_recording_including_clean_ones(self) -> None:
         results = [("rec_b", _metrics()), ("rec_a", _metrics(flags=("clipping",)))]
-        rows = [json.loads(line) for line in render_quality_jsonl(results).splitlines()]
-        assert [row["id"] for row in rows] == ["rec_a", "rec_b"]
+        lines = [json.loads(text) for text in render_quality_jsonl(results).splitlines()]
+        assert [line["id"] for line in lines] == ["rec_a", "rec_b"]
 
     def test_key_order_is_fixed_not_insertion_dependent(self) -> None:
-        line = render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0]
-        assert list(json.loads(line).keys()) == list(QUALITY_KEYS)
+        text = render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0]
+        assert list(json.loads(text).keys()) == list(QUALITY_KEYS)
 
     def test_clean_recording_has_an_empty_flags_array(self) -> None:
-        row = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
-        assert row["flags"] == []
+        line = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
+        assert line["flags"] == []
 
     def test_flags_are_a_json_array_not_a_string(self) -> None:
         results = [("rec_a", _metrics(flags=("clipping", "low_volume")))]
-        row = json.loads(render_quality_jsonl(results).splitlines()[0])
-        assert row["flags"] == ["clipping", "low_volume"]
+        line = json.loads(render_quality_jsonl(results).splitlines()[0])
+        assert line["flags"] == ["clipping", "low_volume"]
 
     def test_rounding_is_fixed_per_field_type(self) -> None:
         """dBFS 2 dp, ratios 4 dp, seconds 3 dp — so the file is an exact golden."""
-        row = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
-        assert row["peak_dbfs"] == -0.51
-        assert row["active_rms_dbfs"] == -22.4
-        assert row["clip_ratio"] == 0.0031
-        assert row["silence_ratio"] == 0.0812
-        assert row["duration_s"] == 4.0
-        assert row["leading_silence_s"] == 0.34
-        assert row["trailing_silence_s"] == 0.12
+        line = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
+        assert line["peak_dbfs"] == -0.51
+        assert line["active_rms_dbfs"] == -22.4
+        assert line["clip_ratio"] == 0.0031
+        assert line["silence_ratio"] == 0.0812
+        assert line["duration_s"] == 4.0
+        assert line["leading_silence_s"] == 0.34
+        assert line["trailing_silence_s"] == 0.12
 
     def test_input_order_does_not_change_the_bytes(self) -> None:
         results = [("rec_a", _metrics()), ("rec_b", _metrics(duration_s=1.0))]
