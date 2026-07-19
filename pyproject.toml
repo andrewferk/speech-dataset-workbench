@@ -32,10 +32,14 @@ target-version = "py313"
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.isort]
+# `examples` is a repo-root tree, not a package under `src`, so isort cannot infer it (ADR-0009).
+known-first-party = ["sdw", "tests", "examples"]
+
 [tool.mypy]
 python_version = "3.13"
 strict = true
-files = ["src", "tests"]
+files = ["src", "tests", "examples"]
 
 [[tool.mypy.overrides]]
 module = ["soundfile.*", "soxr.*", "scipy.*", "matplotlib.*"]

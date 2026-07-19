@@ -1,0 +1,13 @@
+path,speaker_id,session_id,prompt_text,device,environment
+spk_a/sess_a1/a1_01.wav,spk_a,sess_a1,The quick brown fox jumps over the lazy dog.,usb condenser microphone,quiet room
+spk_a/sess_a1/a1_02.wav,spk_a,sess_a1,She sells sea shells by the sea shore.,usb condenser microphone,quiet room
+spk_a/sess_a1/a1_03.wav,spk_a,sess_a1,A stitch in time saves nine.,usb condenser microphone,quiet room
+spk_a/sess_a2/a2_01.wav,spk_a,sess_a2,Please read the sentence on the card in front of you.,usb condenser microphone,home office
+spk_a/sess_a2/a2_02.wav,spk_a,sess_a2,Please read the sentence on the card in front of you.,usb condenser microphone,home office
+spk_a/sess_a2/a2_03.wav,spk_a,sess_a2,How much wood would a woodchuck chuck.,usb condenser microphone,home office
+spk_b/sess_b1/b1_01.wav,spk_b,sess_b1,The rain in Spain falls mainly on the plain.,laptop built-in microphone,living room
+spk_b/sess_b1/b1_02.wav,spk_b,sess_b1,I moved too far from the microphone on this one.,laptop built-in microphone,living room
+spk_b/sess_b1/b1_03.wav,spk_b,sess_b1,Every good boy deserves fudge.,laptop built-in microphone,living room
+spk_b/sess_b2/b2_01.wav,spk_b,sess_b2,Pack my box with five dozen liquor jugs.,field recorder,parked car
+spk_b/sess_b2/b2_02.wav,spk_b,sess_b2,The five boxing wizards jump quickly.,field recorder,parked car
+spk_b/sess_b2/b2_03.wav,spk_b,sess_b2,Bright vixens jump; dozy fowl quack.,field recorder,parked car

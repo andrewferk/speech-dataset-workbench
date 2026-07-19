@@ -30,8 +30,9 @@ import soundfile as sf
 # every Original we synthesize is integer PCM (ADR-0005).
 _SUBTYPE: dict[int, str] = {16: "PCM_16", 24: "PCM_24", 32: "PCM_32"}
 
-# The recordings.csv column set (#24, ADR-0006), shared by every --data-in this module writes.
-_CSV_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
+# The recordings.csv column set (#24, ADR-0006), shared by every --data-in written from this
+# generator — including examples/generate.py's, which is why it is public (ADR-0009).
+CSV_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
 
 
 def _subtype(bit_depth: int) -> str:
@@ -191,7 +192,7 @@ def write_minimal_data_in(root: Path) -> Path:
         channels=1,
     )
     with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         writer.writerow(
             {
@@ -349,7 +350,7 @@ def write_reference_tree(root: Path) -> None:
             channels=rec.channels,
         )
     with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
         writer.writeheader()
         for rec in _REFERENCE_RECORDINGS:
             writer.writerow(rec.csv_row())
