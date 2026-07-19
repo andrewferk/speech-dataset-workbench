@@ -17,16 +17,20 @@ buys, each of which is a property of *what the file says*, not of how it was dra
 from pathlib import Path
 from typing import Any
 
+import numpy as np
+import numpy.typing as npt
 import pytest
 
 from sdw.errors import HardError
 from sdw.images import (
     DB_RANGE,
+    N_FFT,
     SPECTROGRAM_SIZE_PX,
     WAVEFORM_SIZE_PX,
     WAVEFORM_YLIM,
     image_paths,
     render,
+    stft_dbfs,
     title,
 )
 from sdw.ingest import Recording
@@ -202,6 +206,79 @@ class TestAbsoluteScales:
         synth.silence(path, duration_s=0.5)
         out_dir = _render(tmp_path, audio=normalize(path))
         assert len(list(out_dir.iterdir())) == 2
+
+    def test_the_x_axis_follows_the_duration(self, tmp_path: Path) -> None:
+        # x is the one per-recording axis: the same tone at two lengths must draw two different
+        # pictures, since a fixed x window would render both as the same trace plus whitespace.
+        short = _render(tmp_path / "short", audio=_audio(tmp_path / "s.wav", duration_s=0.5))
+        long = _render(tmp_path / "long", audio=_audio(tmp_path / "l.wav", duration_s=4.0))
+        name = "rec_0123456789abcdef.waveform.png"
+        assert (short / name).read_bytes() != (long / name).read_bytes()
+
+
+class TestSpectrogramScale:
+    """The dB values themselves — the half of "absolute" that comparing two PNGs cannot see.
+
+    A per-image-normalized spectrogram would still be 201 bins and still differ between a loud and
+    a quiet Recording. What it could not do is report a -40 dBFS tone as -40: these assertions are
+    what actually separate an absolute scale from a relative one.
+    """
+
+    def _tone(self, amp: float, duration_s: float = 1.0) -> npt.NDArray[np.float64]:
+        t = np.arange(int(duration_s * 16000), dtype=np.float64) / 16000
+        return amp * np.sin(2.0 * np.pi * 440.0 * t)
+
+    def test_bins_span_zero_to_nyquist(self) -> None:
+        decibels, _ = stft_dbfs(self._tone(0.5), 16000)
+        assert decibels.shape[0] == N_FFT // 2 + 1
+
+    def test_a_full_scale_tone_reads_zero_dbfs(self) -> None:
+        decibels, _ = stft_dbfs(self._tone(1.0), 16000)
+        assert decibels.max() == pytest.approx(0.0, abs=0.05)
+
+    def test_a_quiet_tone_reads_its_own_level(self) -> None:
+        # -40 dBFS in, -40 dBFS out: the number is the signal's, not a function of the file's max.
+        decibels, _ = stft_dbfs(self._tone(0.01), 16000)
+        assert decibels.max() == pytest.approx(-40.0, abs=0.05)
+
+    def test_the_scale_is_not_per_image_normalized(self) -> None:
+        loud, _ = stft_dbfs(self._tone(1.0), 16000)
+        quiet, _ = stft_dbfs(self._tone(0.01), 16000)
+        assert loud.max() - quiet.max() == pytest.approx(40.0, abs=0.1)
+
+    def test_magnitude_is_clamped_to_the_top_of_the_range(self) -> None:
+        decibels, _ = stft_dbfs(self._tone(5.0), 16000)
+        assert decibels.max() == DB_RANGE[1]
+
+    def test_silence_floors_at_the_bottom_of_the_range(self) -> None:
+        decibels, _ = stft_dbfs(np.zeros(16000), 16000)
+        assert decibels.min() == DB_RANGE[0]
+        assert decibels.max() == DB_RANGE[0]
+
+
+class TestShortRecordings:
+    """A Recording too short for a single STFT window is still data, so it still gets an Image.
+
+    `duration_out_of_range` is *advisory* (ADR-0007): a 5 ms Original is valid input that a
+    consumer may filter on. If the image stage refused it, an advisory flag would have become a
+    build-aborting one through the back door — the exact coupling ADR-0011 forbids.
+    """
+
+    @pytest.mark.parametrize("duration_s", [0.001, 0.01, 0.0125, 0.025, 0.05, 0.2])
+    def test_a_very_short_recording_renders_both_images(
+        self, tmp_path: Path, duration_s: float
+    ) -> None:
+        out_dir = _render(tmp_path, audio=_audio(tmp_path / "s.wav", duration_s=duration_s))
+        assert len(list(out_dir.iterdir())) == 2
+        for path in out_dir.iterdir():
+            assert path.read_bytes().startswith(PNG_MAGIC)
+
+    @pytest.mark.parametrize("num_samples", [1, 16, 199, 200, 401])
+    def test_the_spectrogram_always_has_at_least_a_frame_of_width(self, num_samples: int) -> None:
+        # A zero-width span would hand matplotlib an empty extent and draw a blank plot.
+        decibels, span = stft_dbfs(np.zeros(num_samples), 16000)
+        assert decibels.shape[1] >= 1
+        assert span[1] > span[0]
 
 
 class TestDeterminism:

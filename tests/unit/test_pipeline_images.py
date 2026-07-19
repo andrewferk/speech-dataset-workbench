@@ -14,7 +14,9 @@ from pathlib import Path
 
 import pytest
 
+from sdw import images
 from sdw.cli import main
+from sdw.errors import HardError
 from tests import synth
 
 
@@ -81,6 +83,24 @@ class TestAbortLeavesNoImages:
         assert _build(data_in, data_out) != 0
         assert not data_out.exists()
         assert not data_out.with_name(data_out.name + ".tmp").exists()
+
+    def test_a_render_failure_aborts_the_build(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # The failure ADR-0011 legislates for directly: not a bad Original, but a render that
+        # breaks. Warn-and-skip would leave a Recording with no PNG and the build exiting 0, which
+        # is indistinguishable from one never rendered.
+        data_in, data_out = _data_in(tmp_path / "in", 3), tmp_path / "out"
+        calls = {"n": 0}
+
+        def failing(*args: object, **kwargs: object) -> None:
+            calls["n"] += 1
+            if calls["n"] == 2:
+                raise HardError("render exploded")
+
+        monkeypatch.setattr(images, "render", failing)
+        assert _build(data_in, data_out) != 0
+        assert not data_out.exists()
 
     def test_a_previous_build_survives_an_abort(self, tmp_path: Path) -> None:
         data_in, data_out = _data_in(tmp_path / "in", 2), tmp_path / "out"

@@ -78,6 +78,10 @@ DB_RANGE = (-80.0, 0.0)
 N_FFT = 400
 HOP = 160
 
+# The shortest signal `ShortTimeFFT` will accept: half a window, rounded up. Shorter Recordings are
+# zero-extended to it rather than refused — see :func:`_padded`.
+_MIN_STFT_SAMPLES = -(-N_FFT // 2)
+
 # `magma`: perceptually uniform, colorblind-safe, greyscale-safe, and the conventional map for a
 # dB spectrogram.
 COLORMAP = "magma"
@@ -232,7 +236,7 @@ def _render_spectrogram(
     the same colour means the same energy in any two Images and a quiet Recording renders dim.
     """
     duration_s = len(samples) / sample_rate
-    decibels, span = _stft_dbfs(samples, sample_rate)
+    decibels, span = stft_dbfs(samples, sample_rate)
 
     figure = plt.figure(figsize=SPECTROGRAM_FIGSIZE)
     try:
@@ -261,10 +265,14 @@ def _render_spectrogram(
         plt.close(figure)
 
 
-def _stft_dbfs(
+def stft_dbfs(
     samples: npt.NDArray[np.float64], sample_rate: int
 ) -> tuple[npt.NDArray[np.float64], tuple[float, float]]:
     """The STFT magnitude in absolute dBFS clamped to :data:`DB_RANGE`, and the seconds it spans.
+
+    The returned array is ``(201 bins, frames)`` spanning 0 .. 8 kHz, and the span is the time of
+    the plotted region's outer edges — half a hop beyond the first and last frame centres, since a
+    frame paints a pixel of width `hop`, not a line.
 
     Magnitude is scaled by ``2 / sum(window)`` so a bin's value is the amplitude of the sinusoid
     that produced it, on the same 0 .. 1 full-scale ruler the waveform uses — that is what makes
@@ -272,17 +280,52 @@ def _stft_dbfs(
     dB conversion is ADR-0007's raw ``20*log10``, with a magnitude floor standing in for -inf.
     Clamping (rather than letting matplotlib clip) makes the rendered range explicit in the data.
 
-    Only frames whose whole window lies inside the Recording are kept. The border frames a
-    zero-padded STFT also produces see a window that is part signal and part silence, which reads
-    as a broadband vertical stripe at each end — a picture of the padding, not of the audio, and
-    exactly the kind of artifact an operator would otherwise have to learn to ignore.
+    Where the Recording is long enough to have them, only frames whose whole window lies inside it
+    are kept: the border frames a zero-padded STFT also produces see a window that is part signal
+    and part silence, which reads as a broadband vertical stripe at each end — a picture of the
+    padding, not of the audio. A Recording too short to hold two such frames keeps the padded
+    frames instead, because a Recording is *always* renderable: a 5 ms Original is valid data
+    carrying at most an advisory `duration_out_of_range`, and it must produce a picture, not a
+    render failure that would abort the whole build.
     """
     window = hann(N_FFT, sym=False)
     transform = ShortTimeFFT(window, hop=HOP, fs=sample_rate, scale_to=None, fft_mode="onesided")
-    first = transform.lower_border_end[1]
-    last = max(first + 1, transform.upper_border_begin(len(samples))[1])
-    magnitude = np.abs(transform.stft(samples, p0=first, p1=last)) * (2.0 / window.sum())
+    signal = _padded(samples)
+    first, last = _frame_range(transform, len(signal))
+    magnitude = np.abs(transform.stft(signal, p0=first, p1=last)) * (2.0 / window.sum())
     decibels = 20.0 * np.log10(np.maximum(magnitude, _MAGNITUDE_FLOOR))
-    times = transform.t(len(samples), p0=first, p1=last)
-    span = (float(times[0]), float(times[-1]))
+
+    times = transform.t(len(signal), p0=first, p1=last)
+    half_hop = HOP / (2.0 * sample_rate)
+    span = (float(times[0]) - half_hop, float(times[-1]) + half_hop)
     return cast("npt.NDArray[np.float64]", np.clip(decibels, *DB_RANGE)), span
+
+
+def _padded(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
+    """``samples``, zero-extended if it is shorter than one STFT can accept.
+
+    `ShortTimeFFT` refuses a signal shorter than half a window outright, so a Recording under
+    12.5 ms would raise — and a raise here aborts the whole build. But a Recording that short is
+    *valid data*: it carries an advisory `duration_out_of_range` and nothing more, and ADR-0011
+    guarantees it an Image. The padding is the same silence the transform's own border frames are
+    made of, and the x-axis still ends at the true duration, so nothing invented is on display.
+    """
+    shortfall = _MIN_STFT_SAMPLES - len(samples)
+    return samples if shortfall <= 0 else np.pad(samples, (0, shortfall))
+
+
+def _frame_range(transform: ShortTimeFFT, num_samples: int) -> tuple[int | None, int | None]:
+    """The fully-supported frame range, or ``(None, None)`` to keep every frame.
+
+    ``upper_border_begin`` is only defined once the signal is at least half a window long, and the
+    supported range can be empty or a single frame for a Recording of a few tens of milliseconds —
+    both of which would leave nothing meaningful to plot. Falling back to the default (padded)
+    range is what keeps such a Recording renderable at all.
+    """
+    if num_samples < N_FFT:
+        return None, None
+    first = transform.lower_border_end[1]
+    last = transform.upper_border_begin(num_samples)[1]
+    if last - first < 2:
+        return None, None
+    return first, last
