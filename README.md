@@ -87,11 +87,18 @@ Two commands, sharing one checking engine so they can never disagree:
 
 ```bash
 # Full build: normalize → validate → split → manifest → images → report
-python -m <package> build --data-in ./data-in --data-out ./data-out [--config config.toml]
+PYTHONPATH=src uv run python -m <package> build --data-in ./data-in --data-out ./data-out [--config config.toml]
 
 # Read-only preflight; runs build's stages 1–4, prints to stdout, writes nothing
-python -m <package> validate --data-in ./data-in [--config config.toml]
+PYTHONPATH=src uv run python -m <package> validate --data-in ./data-in [--config config.toml]
 ```
+
+The `PYTHONPATH=src` prefix is what the src-layout costs: nothing installs the package
+(ADR-0012), so the interpreter needs `src/` on the path to find the entry point. `pytest` and CI
+set it for you — `pyproject.toml`'s `[tool.pytest.ini_options] pythonpath` and the CI workflow
+respectively — and [mise](https://mise.jdx.dev) users get it from `mise.toml`, so the prefix is
+only needed when running the CLI by hand without mise. See
+[issue #48](https://github.com/andrewferk/speech-dataset-workbench/issues/48) for removing it.
 
 `validate` exits `0` **if and only if** a subsequent `build` on the same input will not hit a hard
 error. All tuning lives in an optional TOML config rather than per-parameter flags, so the CLI stays
