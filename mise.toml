@@ -6,3 +6,8 @@ uv = "latest"
 # entry point `python -m sdw` needs src/ on the path. CI sets the same variable.
 [env]
 PYTHONPATH = "{{config_root}}/src"
+
+# Point `python` at uv's .venv rather than the bare toolchain interpreter, so `python -m sdw`
+# and `pytest` work as documented in the README without a `uv run` prefix. Deps still come
+# from `uv sync`; `create` only makes the (empty) venv exist.
+_.python.venv = { path = ".venv", create = true }
