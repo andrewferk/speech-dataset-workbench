@@ -31,6 +31,7 @@ model is then literal in the data, and v0.2 populates the slot in place with no 
 import json
 from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, fields
+from pathlib import PurePosixPath
 from typing import Any
 
 from sdw.config import Config
@@ -78,6 +79,9 @@ class Sample:
     audio_filepath: str
     duration: float
     text: str
+    # `None`, not `str | None`: the type states that v0.1 *cannot* carry a Perceived text, so a
+    # stage that tried to populate the slot early would fail type-checking rather than quietly ship
+    # a half-annotated Dataset. Widening it to `str | None` is v0.2's first move (ADR-0006).
     perceived_text: None
     prompt_id: str
     speaker_id: str
@@ -213,13 +217,20 @@ def _hf_line(sample: Sample) -> dict[str, Any]:
     Everything else is at parity, and ``file_name`` keeps ``audio_filepath``'s position, so the two
     views read as one Sample seen twice rather than as two schemas that happen to overlap.
     """
-    return {
-        ("file_name" if name == "audio_filepath" else name): (
-            f"{sample.id}.wav" if name == "audio_filepath" else value
-        )
-        for name, value in _line(sample).items()
-        if name != "split"
-    }
+    return dict(_hf_field(name, value) for name, value in _line(sample).items() if name != "split")
+
+
+def _hf_field(name: str, value: Any) -> tuple[str, Any]:
+    """One canonical field as its HF counterpart — the whole rename, key and value together.
+
+    Split out of the comprehension because renaming the key and rewriting the value are one
+    transform, not two: the metadata file sits *beside* the audio, which is simultaneously why the
+    key is ``file_name`` and why the value loses its directories. Testing that condition once keeps
+    the two halves from ever being changed apart.
+    """
+    if name != "audio_filepath":
+        return name, value
+    return "file_name", PurePosixPath(value).name
 
 
 def _jsonl(lines: Iterable[Mapping[str, Any]]) -> str:
