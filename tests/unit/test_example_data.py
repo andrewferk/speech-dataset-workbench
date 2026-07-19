@@ -5,11 +5,14 @@ divergence between the generator and its output is a CI failure rather than a ma
 This is safe to assert byte-exactly because the generator writes 16 kHz mono directly and never
 resamples — ADR-0005's within-arch-only caveat is about soxr, which is not in this loop.
 
-The rest pin the *shape* ADR-0009 chose to teach with — 2 Speakers, 4 Sessions, 12 Samples, one
+The rest pin the *shape* ADR-0009 chose to teach with — 2 Speakers, 4 Sessions, 12 Recordings, one
 Prompt recorded twice within a Session, exactly one Recording under the `low_volume` knob — because
 that shape is the example's whole content, and a well-meaning edit could quietly erase any of it.
 
-Nothing here invokes ``build``: the example depends only on the generator.
+The unit here is the **Recording**, not the Sample: `--data-in` holds Recordings, and Samples are
+what `build` emits from them (CONTEXT.md). The two count the same in v0.1 — kept Recordings map 1:1
+to Samples — but nothing below invokes `build`, so nothing below has seen a Sample. The example
+depends only on the generator.
 """
 
 import csv
@@ -26,8 +29,8 @@ from sdw.quality import CLIP_THRESHOLD
 
 COMMITTED = generate.DATA_IN
 
-# ADR-0009: ~12 clips of a few seconds at mono/16 kHz/16-bit is well under a megabyte, and the
-# tree is committed with no gitignore entries — so a ceiling is worth stating as a test.
+# ADR-0009: ~12 Recordings of a few seconds at mono/16 kHz/16-bit is well under a megabyte, and
+# the tree is committed with no gitignore entries — so a ceiling is worth stating as a test.
 MAX_TREE_BYTES = 1_000_000
 
 
@@ -56,7 +59,7 @@ def test_no_gitignore_entries_under_the_example_tree() -> None:
     assert not list(COMMITTED.rglob(".gitignore"))
 
 
-def test_shape_is_two_speakers_four_sessions_twelve_samples() -> None:
+def test_shape_is_two_speakers_four_sessions_twelve_recordings() -> None:
     recordings = read_recordings(COMMITTED)
     assert len(recordings) == 12
     assert len({r.speaker_id for r in recordings}) == 2
@@ -70,8 +73,8 @@ def test_shape_is_two_speakers_four_sessions_twelve_samples() -> None:
 
 
 def test_one_prompt_is_recorded_twice_within_one_session() -> None:
-    # `(Session, Prompt)` is not unique and all attempts are data (ADR-0001). Both takes survive
-    # ingest as separate Recordings, which they only do if their bytes differ.
+    # `(Session, Prompt)` is not unique and all Attempts are data (ADR-0001). Both Attempts
+    # survive ingest as separate Recordings, which they only do if their bytes differ.
     recordings = read_recordings(COMMITTED)
     counts: dict[tuple[str, str], int] = {}
     for r in recordings:
@@ -85,8 +88,8 @@ def test_one_prompt_is_recorded_twice_within_one_session() -> None:
 def test_every_recording_is_byte_distinct() -> None:
     # A Recording's bytes follow entirely from its `(freq_hz, duration_s, amp_dbfs)` triple, so two
     # Recordings sharing a triple would be byte-identical Originals and collapse to one Recording
-    # at ingest (ADR-0001) — a corpus quietly one Sample shorter than it reads. Asserted on the
-    # generator's table, where the mistake is made, as well as on the committed bytes.
+    # at ingest (ADR-0001) — an input set quietly one Recording shorter than it reads. Asserted on
+    # the generator's table, where the mistake is made, as well as on the committed bytes.
     triples = {(r.freq_hz, r.duration_s, r.amp_dbfs) for r in generate.RECORDINGS}
     assert len(triples) == len(generate.RECORDINGS)
 
@@ -96,7 +99,7 @@ def test_every_recording_is_byte_distinct() -> None:
 
 def test_exactly_one_recording_is_below_the_low_volume_threshold() -> None:
     # Measured the way the pipeline measures it, on the audio as committed: one flagged Recording
-    # is the point (ADR-0007/ADR-0009), and it stays in the corpus.
+    # is the point (ADR-0007/ADR-0009), and it is kept, not quarantined.
     threshold = QualityConfig().low_volume_rms_dbfs
     quiet = [path for path in sorted(COMMITTED.rglob("*.wav")) if _rms_dbfs(path) < threshold]
     assert len(quiet) == 1
@@ -104,7 +107,7 @@ def test_exactly_one_recording_is_below_the_low_volume_threshold() -> None:
 
 def test_every_recording_clears_the_other_flags() -> None:
     # Only the deliberate `low_volume` should fire: a demo whose first run flags three things
-    # reads as a broken corpus rather than a worked example.
+    # reads as a broken input set rather than a worked example.
     config = QualityConfig()
     for path in sorted(COMMITTED.rglob("*.wav")):
         samples, rate = sf.read(path, dtype="float64", always_2d=False)

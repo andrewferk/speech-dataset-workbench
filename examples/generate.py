@@ -1,10 +1,10 @@
 """Write the committed example ``--data-in`` (ADR-0009).
 
-The corpus an operator builds on their first run, before supplying any audio of their own:
-``examples/data-in/`` ships a ``recordings.csv`` and twelve WAVs, so ``build --data-in
+The input set an operator builds on their first run, before supplying any audio of their own:
+``examples/data-in/`` ships a ``recordings.csv`` and twelve Recordings, so ``build --data-in
 examples/data-in`` works straight out of a clone with no downloads. The audio is generated
 tones, not speech — ADR-0009 requires an ``examples/README.md`` to say so plainly and up front,
-and #35 writes it from this corpus's observed output — while the Prompts stay honest English
+and #35 writes it from this input set's observed output — while the Prompts stay honest English
 sentences, because a Prompt that described its own tone would teach a wrong mental model of what
 a Prompt is.
 
@@ -16,17 +16,17 @@ this module contributes only the *shape*. That shape is chosen to teach, one Rec
   Speakers fire the report-only speaker-overlap note, which is how the reader learns that
   disjointness is Session-level, not Speaker-level.
 - **One Prompt recorded twice within one Session.** `(Session, Prompt)` is not unique and all
-  attempts are data (ADR-0001) — visible in the corpus rather than asserted in prose. The two
-  takes differ in signal, so they are not byte-identical and do not collapse to one Recording
-  (ADR-0001/ADR-0013): two attempts, two Samples.
+  Attempts are data (ADR-0001) — visible in the input set rather than asserted in prose. The two
+  Recordings differ in signal, so they are not byte-identical and do not collapse to one Recording
+  (ADR-0001/ADR-0013): two Attempts, two Recordings.
 - **Exactly one Recording below the -30 dBFS knob.** It trips `low_volume` and *stays in the
   Manifest*, which is ADR-0007's included-and-flagged policy demonstrating itself. One flag keeps
-  the signal readable; three would read as a broken corpus.
+  the signal readable; three would read as a broken input set.
 
 Everything else is parked away from a threshold on purpose: every duration sits inside the
 0.5-20 s window, every level except the quiet one is -18 dBFS (clear of -30), and no tone
 approaches full scale, so `duration_out_of_range` and `clipping` stay silent and the only flag the
-reader meets is the one the corpus is teaching.
+reader meets is the one the input set is teaching.
 
 Every WAV is written at 16 kHz mono 16-bit directly — nothing here resamples — so the output is
 plain numpy arithmetic, cross-machine stable, and safe for the exact byte comparison in
@@ -54,12 +54,15 @@ from tests import synth  # noqa: E402  (after the sys.path bootstrap above, by n
 
 DATA_IN = REPO_ROOT / "examples" / "data-in"
 
-# The Normalized target (ADR-0005), written directly so the generator never resamples.
+# The Normalized target (ADR-0005), written directly so the generator never resamples. Restated
+# here rather than imported from `sdw.normalize` on purpose: the drift test checks the committed
+# WAVs against the product's `TARGET_SAMPLE_RATE`, and that check only means something while the
+# two are stated independently.
 SAMPLE_RATE = 16000
 BIT_DEPTH = 16
 CHANNELS = 1
 
-# The clean level, comfortably clear of the -30 dBFS `low_volume` knob, and the one quiet take
+# The clean level, comfortably clear of the -30 dBFS `low_volume` knob, and the one quiet Recording
 # that sits below it. Durations pair with frequencies that make `freq_hz * duration_s` whole, so
 # each tone is an integer number of cycles and its RMS is exact to rounding (see `synth._tone`).
 CLEAN_DBFS = -18.0
@@ -91,7 +94,8 @@ class _ExampleRecording:
         }
 
 
-# Named so a reader scanning `examples/data-in/` sees the corpus structure in the filenames alone.
+# Named so a reader scanning `examples/data-in/` sees the input set's structure in the filenames
+# alone.
 RECORDINGS = [
     # --- Speaker a, Session a1 ----------------------------------------------------------------
     _ExampleRecording(
@@ -127,7 +131,7 @@ RECORDINGS = [
         device="usb condenser microphone",
         environment="quiet room",
     ),
-    # --- Speaker a, Session a2: the second take of one Prompt lives here ----------------------
+    # --- Speaker a, Session a2: the second Attempt at one Prompt lives here -------------------
     _ExampleRecording(
         path="spk_a/sess_a2/a2_01.wav",
         freq_hz=220.0,
@@ -139,11 +143,11 @@ RECORDINGS = [
         device="usb condenser microphone",
         environment="home office",
     ),
-    # The retake: same Speaker, same Session, same Prompt as `a2_01`, a different signal. Both
-    # attempts are data — neither is a keeper the other loses to. Every Recording's bytes are
+    # The second Attempt: same Speaker, same Session, same Prompt as `a2_01`, a different signal.
+    # Both Attempts are data; neither is selected over the other. Every Recording's bytes are
     # decided entirely by its `(freq_hz, duration_s, amp_dbfs)` triple, so those triples must stay
-    # distinct corpus-wide: two Recordings sharing one would be byte-identical Originals and
-    # collapse to a single Recording at ingest (ADR-0001), silently shrinking the corpus.
+    # distinct across the input set: two Recordings sharing one would be byte-identical Originals
+    # and collapse to a single Recording at ingest (ADR-0001), silently shrinking the input set.
     _ExampleRecording(
         path="spk_a/sess_a2/a2_02.wav",
         freq_hz=550.0,
@@ -166,7 +170,7 @@ RECORDINGS = [
         device="usb condenser microphone",
         environment="home office",
     ),
-    # --- Speaker b, Session b1: the quiet take lives here --------------------------------------
+    # --- Speaker b, Session b1: the quiet Recording lives here ---------------------------------
     _ExampleRecording(
         path="spk_b/sess_b1/b1_01.wav",
         freq_hz=440.0,
@@ -242,8 +246,8 @@ def write_example_tree(root: Path) -> None:
     """Write the example ``--data-in`` (``recordings.csv`` plus the twelve WAVs) into ``root``.
 
     Deterministic and resample-free, so the committed output is safe to byte-compare (ADR-0009).
-    Subdirectories are created as needed: the corpus is laid out ``speaker/session/`` to show that
-    ``--data-in`` may be arranged in any subdirectory layout the operator likes (#24).
+    Subdirectories are created as needed: the input set is laid out ``speaker/session/`` to show
+    that ``--data-in`` may be arranged in any subdirectory layout the operator likes (#24).
     """
     root.mkdir(parents=True, exist_ok=True)
     for rec in RECORDINGS:
