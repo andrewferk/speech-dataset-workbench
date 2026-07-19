@@ -8,8 +8,9 @@ and #35 writes it from this input set's observed output — while the Prompts st
 sentences, because a Prompt that described its own tone would teach a wrong mental model of what
 a Prompt is.
 
-Tone-writing itself lives in :mod:`tests.synth`, the single source of fixture truth (ADR-0008);
-this module contributes only the *shape*. That shape is chosen to teach, one Recording at a time:
+Tone-writing and CSV-writing both live in :mod:`tests.synth`, the single source of fixture truth
+(ADR-0008); this module contributes only the *shape*. That shape is chosen to teach, one
+Recording at a time:
 
 - **4 Sessions across 2 Speakers.** Four clears ADR-0004's >= 3-Session floor, so `val` and `test`
   each receive a real Session and the first run never prints the produce-and-flag warning. Two
@@ -37,7 +38,6 @@ plain numpy arithmetic, cross-machine stable, and safe for the exact byte compar
 
 from __future__ import annotations
 
-import csv
 import sys
 from dataclasses import dataclass
 from pathlib import Path
@@ -262,11 +262,11 @@ def write_example_tree(root: Path) -> None:
             bit_depth=BIT_DEPTH,
             channels=CHANNELS,
         )
-    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=synth.CSV_COLUMNS)
-        writer.writeheader()
-        for rec in RECORDINGS:
-            writer.writerow(rec.csv_row())
+    # Written through `synth.write_recordings_csv` so there is one CSV writer behind every
+    # `--data-in` in the repo (ADR-0008). Each row here states all six columns rather than leaning
+    # on that helper's defaults: this CSV is also the operator's bring-your-own template
+    # (ADR-0009), and a template with columns silently filled in teaches nothing.
+    synth.write_recordings_csv(root, [rec.csv_row() for rec in RECORDINGS])
 
 
 def main() -> None:

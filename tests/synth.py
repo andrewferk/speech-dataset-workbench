@@ -30,9 +30,8 @@ import soundfile as sf
 # every Original we synthesize is integer PCM (ADR-0005).
 _SUBTYPE: dict[int, str] = {16: "PCM_16", 24: "PCM_24", 32: "PCM_32"}
 
-# The recordings.csv column set (#24, ADR-0006), shared by every --data-in written from this
-# generator — including examples/generate.py's, which is why it is public (ADR-0009).
-CSV_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
+# The recordings.csv column set (#24, ADR-0006), shared by every --data-in this module writes.
+_CSV_COLUMNS = ["path", "speaker_id", "session_id", "prompt_text", "device", "environment"]
 
 
 def _subtype(bit_depth: int) -> str:
@@ -173,6 +172,30 @@ def leading_trailing_silence(
     sf.write(path, _to_channels(mono, channels), sample_rate, subtype=subtype)
 
 
+_CSV_DEFAULTS = {
+    "speaker_id": "spk_a",
+    "session_id": "sess_1",
+    "prompt_text": "Hello there.",
+    "device": "mic",
+    "environment": "quiet room",
+}
+
+
+def write_recordings_csv(root: Path, rows: list[dict[str, str]]) -> Path:
+    """Write ``recordings.csv`` at ``root`` from ``rows``, filling unstated columns with defaults.
+
+    A row states only what its test is about — usually just ``path`` — because the metadata columns
+    are rarely the subject and spelling all six out per row buries the one that matters. Returns
+    ``root`` for use as ``--data-in``.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows({**_CSV_DEFAULTS, **row} for row in rows)
+    return root
+
+
 def write_minimal_data_in(root: Path) -> Path:
     """The smallest input that survives the whole preflight: one CSV row, one real WAV.
 
@@ -191,20 +214,7 @@ def write_minimal_data_in(root: Path) -> Path:
         bit_depth=16,
         channels=1,
     )
-    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
-        writer.writeheader()
-        writer.writerow(
-            {
-                "path": "a.wav",
-                "speaker_id": "spk_a",
-                "session_id": "sess_1",
-                "prompt_text": "Hello there.",
-                "device": "mic",
-                "environment": "quiet room",
-            }
-        )
-    return root
+    return write_recordings_csv(root, [{"path": "a.wav"}])
 
 
 # --- Abort-case inputs (structural failures that must abort a build, ADR-0005/ADR-0007) ------
@@ -350,7 +360,7 @@ def write_reference_tree(root: Path) -> None:
             channels=rec.channels,
         )
     with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=CSV_COLUMNS)
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
         writer.writeheader()
         for rec in _REFERENCE_RECORDINGS:
             writer.writerow(rec.csv_row())
