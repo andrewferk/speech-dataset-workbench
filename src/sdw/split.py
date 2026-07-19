@@ -207,7 +207,7 @@ def _repair(
     for starved in SPLIT_ORDER[1:]:
         if _sessions_per_split(assignments)[starved]:
             continue
-        donor = _donor(assignments, sizes, targets)
+        donor = _donor_split(assignments, sizes, targets)
         if donor is not None:
             session_id = _smallest_session(assignments, order, sizes, donor)
             assignments[session_id] = starved
@@ -215,7 +215,7 @@ def _repair(
     return tuple(moves)
 
 
-def _donor(
+def _donor_split(
     assignments: dict[str, str], sizes: dict[str, int], targets: dict[str, float]
 ) -> str | None:
     """The minimum-deficit Split — the largest surplus — that can spare a Session.
