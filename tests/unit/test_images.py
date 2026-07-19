@@ -275,10 +275,10 @@ class TestShortRecordings:
 
     @pytest.mark.parametrize("num_samples", [1, 16, 199, 200, 401])
     def test_the_spectrogram_always_has_at_least_a_frame_of_width(self, num_samples: int) -> None:
-        # A zero-width span would hand matplotlib an empty extent and draw a blank plot.
-        decibels, span = stft_dbfs(np.zeros(num_samples), 16000)
+        # A zero-width extent would hand matplotlib an empty image and draw a blank plot.
+        decibels, plotted_s = stft_dbfs(np.zeros(num_samples), 16000)
         assert decibels.shape[1] >= 1
-        assert span[1] > span[0]
+        assert plotted_s[1] > plotted_s[0]
 
 
 class TestDeterminism:

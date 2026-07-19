@@ -40,6 +40,8 @@ would invent a third outcome in a two-outcome pipeline and make a missing PNG in
 from one never rendered.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, cast
 
@@ -58,6 +60,8 @@ from sdw.quality import QualityMetrics
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt  # noqa: E402  (must follow the backend selection)
+from matplotlib.axes import Axes  # noqa: E402
+from matplotlib.figure import Figure  # noqa: E402
 
 # Figure geometry (ADR-0011). Wide suits a time series; the spectrogram is taller for its frequency
 # axis and colorbar. 100 DPI keeps each PNG in the ~50-150 KB band.
@@ -198,6 +202,30 @@ def title(recording: Recording, metrics: QualityMetrics) -> str:
     )
 
 
+@contextmanager
+def _image(
+    figsize: tuple[float, float],
+    axes_rect: tuple[float, float, float, float],
+    heading: str,
+    path: Path,
+) -> Iterator[tuple[Figure, Axes]]:
+    """A titled figure on a pinned axes rectangle, written to ``path`` and always closed.
+
+    Every Image shares this lifecycle, and each step of it is load-bearing for determinism: the
+    fixed `add_axes` rectangle (no layout engine, so tick-label width cannot move the plotted
+    area), the `Software`-stripped save, and the `finally` close, without which a build of any
+    size leaks figures until matplotlib warns and then until the process is out of memory.
+    """
+    figure = plt.figure(figsize=figsize)
+    try:
+        axes = figure.add_axes(axes_rect)
+        axes.set_title(heading)
+        yield figure, axes
+        figure.savefig(path, format="png", metadata=_PNG_METADATA)
+    finally:
+        plt.close(figure)
+
+
 def _render_waveform(
     samples: npt.NDArray[np.float64], sample_rate: int, heading: str, path: Path
 ) -> None:
@@ -211,18 +239,12 @@ def _render_waveform(
     duration_s = len(samples) / sample_rate
     times = np.arange(len(samples), dtype=np.float64) / sample_rate
 
-    figure = plt.figure(figsize=WAVEFORM_FIGSIZE)
-    try:
-        axes = figure.add_axes(_WAVEFORM_AXES)
+    with _image(WAVEFORM_FIGSIZE, _WAVEFORM_AXES, heading, path) as (_, axes):
         axes.plot(times, samples, color="#1f77b4")
         axes.set_xlim(0.0, duration_s)
         axes.set_ylim(*WAVEFORM_YLIM)
         axes.set_xlabel("time (s)")
         axes.set_ylabel("amplitude (full scale)")
-        axes.set_title(heading)
-        figure.savefig(path, format="png", metadata=_PNG_METADATA)
-    finally:
-        plt.close(figure)
 
 
 def _render_spectrogram(
@@ -236,17 +258,15 @@ def _render_spectrogram(
     the same colour means the same energy in any two Images and a quiet Recording renders dim.
     """
     duration_s = len(samples) / sample_rate
-    decibels, span = stft_dbfs(samples, sample_rate)
+    decibels, plotted_s = stft_dbfs(samples, sample_rate)
 
-    figure = plt.figure(figsize=SPECTROGRAM_FIGSIZE)
-    try:
-        axes = figure.add_axes(_SPECTROGRAM_AXES)
+    with _image(SPECTROGRAM_FIGSIZE, _SPECTROGRAM_AXES, heading, path) as (figure, axes):
         mesh = axes.imshow(
             decibels,
             origin="lower",
             aspect="auto",
             interpolation="nearest",
-            extent=(span[0], span[1], 0.0, sample_rate / 2),
+            extent=(plotted_s[0], plotted_s[1], 0.0, sample_rate / 2),
             cmap=COLORMAP,
             vmin=DB_RANGE[0],
             vmax=DB_RANGE[1],
@@ -257,22 +277,18 @@ def _render_spectrogram(
         axes.set_xlim(0.0, duration_s)
         axes.set_xlabel("time (s)")
         axes.set_ylabel("frequency (Hz)")
-        axes.set_title(heading)
         colorbar = figure.colorbar(mesh, cax=figure.add_axes(_COLORBAR_AXES))
         colorbar.set_label("magnitude (dBFS)")
-        figure.savefig(path, format="png", metadata=_PNG_METADATA)
-    finally:
-        plt.close(figure)
 
 
 def stft_dbfs(
     samples: npt.NDArray[np.float64], sample_rate: int
 ) -> tuple[npt.NDArray[np.float64], tuple[float, float]]:
-    """The STFT magnitude in absolute dBFS clamped to :data:`DB_RANGE`, and the seconds it spans.
+    """The STFT magnitude in absolute dBFS clamped to :data:`DB_RANGE`, and the seconds it covers.
 
-    The returned array is ``(201 bins, frames)`` spanning 0 .. 8 kHz, and the span is the time of
-    the plotted region's outer edges — half a hop beyond the first and last frame centres, since a
-    frame paints a pixel of width `hop`, not a line.
+    The returned array is ``(201 bins, frames)`` spanning 0 .. 8 kHz, and ``plotted_s`` is the
+    ``(start, end)`` time of the plotted region's outer edges — half a hop beyond the first and
+    last frame centres, since a frame paints a pixel of width `hop`, not a line.
 
     Magnitude is scaled by ``2 / sum(window)`` so a bin's value is the amplitude of the sinusoid
     that produced it, on the same 0 .. 1 full-scale ruler the waveform uses — that is what makes
@@ -297,8 +313,8 @@ def stft_dbfs(
 
     times = transform.t(len(signal), p0=first, p1=last)
     half_hop = HOP / (2.0 * sample_rate)
-    span = (float(times[0]) - half_hop, float(times[-1]) + half_hop)
-    return cast("npt.NDArray[np.float64]", np.clip(decibels, *DB_RANGE)), span
+    plotted_s = (float(times[0]) - half_hop, float(times[-1]) + half_hop)
+    return cast("npt.NDArray[np.float64]", np.clip(decibels, *DB_RANGE)), plotted_s
 
 
 def _padded(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
