@@ -3,15 +3,15 @@
 Still partly stubs: they hold the shape (a pure function of `--data-in` plus config) and the
 hard-error contract. Three real stages have landed — ingest, which reads `recordings.csv`, resolves
 the Originals, and derives their identity (#24); normalization, which decodes each Original and
-converts it to mono 16 kHz in memory (#25); and quality, which measures each Recording and derives
-its advisory flags (#26). That completes `validate`, which now prints the quality digest. The
-remaining stages — splitting, manifest, reports, images — land in later tickets, and all of them
-are on the `build` side.
+converts it to mono 16 kHz in memory (#25); quality, which measures each Recording and derives its
+advisory flags (#26) — which completes `validate`, now printing the quality digest; and splitting,
+which assigns every Session to exactly one Split (#27). The remaining stages — manifest, reports,
+images — land in later tickets, and all of them, like splitting, are on the `build` side.
 """
 
 from pathlib import Path
 
-from sdw import ingest, normalize, quality
+from sdw import ingest, normalize, quality, split
 from sdw.config import Config, load_config
 from sdw.errors import HardError
 from sdw.ingest import Recording
@@ -65,8 +65,13 @@ def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
     """Transform `data_in` into `data_out` as one atomic commit (ADR-0003)."""
     resolved, recordings = _preflight(data_in, config)
     # Measured but not yet written: `reports/quality.jsonl` and the `summary.txt` quality section
-    # are the reporting ticket's (#27), which renders these same metrics.
+    # are the reporting ticket's, which renders these same metrics.
     _normalize_and_measure(data_in, recordings, resolved)
+    # Likewise computed but not yet written. The splitter runs after normalize + validate on the
+    # fixed surviving set (ADR-0004), so its position in this function is the contract, not a
+    # detail: a hard error must abort *before* any Session is placed. The manifest (#12) consumes
+    # the assignments and `summary.txt` (#10) renders the disclosures it carries.
+    split.split_sessions(recordings, resolved.split)
 
 
 def validate(*, data_in: Path, config: Path | None) -> None:
