@@ -1,0 +1,288 @@
+"""Render a waveform and a spectrogram PNG for every Recording (#31, ADR-0011).
+
+The fifth pipeline stage, and the only one whose output no consumer ever sees: an Image is an
+**operator inspection aid**, not a dataset deliverable, and it sits outside `dataset_version`
+(ADR-0010). Both PNGs render from the Normalized samples, so every image shares one 8 kHz Nyquist
+and one amplitude scale and any two are comparable.
+
+Four facts pin the shape:
+
+- **An image states measurements, never verdicts.** The title renders the peak and RMS the quality
+  stage already computed; no flag, no threshold, and no prompt text appears. The levels are *not*
+  recomputed here, and cannot be: :func:`render` takes the :class:`~sdw.quality.QualityMetrics`
+  record as a parameter and this module imports none of the math that produces one. ADR-0007 takes
+  `peak_dbfs` on the **Original** (pre-resample) and the low-volume RMS over the **active region**
+  (silence excluded), so recomputing either from the plotted signal would put a title and a
+  `quality.jsonl` row into disagreement about one Recording — both correct, neither explained.
+  The labels admit the gap: ``peak (orig)`` and ``RMS (active)``.
+
+- **The scales are absolute and fixed.** Waveform y is always -1.0 .. +1.0 and magnitude is always
+  -80 .. 0 dBFS, clamped — never autoscaled, never per-image normalized. A quiet Recording
+  therefore *looks* quiet instead of being autoscaled into a lie, the same colour means the same
+  energy across any two Images, and an Image can never contradict a Quality flag. Only x is
+  per-recording (0 .. duration), because duration is already legible everywhere else and fixing it
+  to `duration_max_s` would couple this stage to a quality threshold.
+
+- **Constants, not config — there is no `[images]` section.** The `dataset_version` preimage hashes
+  the effective config (ADR-0010), so any `[images]` key would mint a new dataset identity for a
+  byte-identical manifest. Changing a constant below is a *tool* change, which `tool_version`
+  already covers. This stage reads no config at all.
+
+- **Determinism is same-machine byte-identity.** Agg, an explicit rcParams style context (so a
+  user's `~/.matplotlib/matplotlibrc` cannot silently alter output on one machine and not another),
+  pinned figsize and DPI, and matplotlib's `Software` tEXt chunk stripped. Cross-machine identity
+  is explicitly not sought — freetype rasterizes glyphs differently across versions — and nothing
+  needs it: ADR-0008's test builds twice on one machine.
+
+A render failure is a tool bug, not a property of the data — every decoded Recording is renderable
+by construction — so it raises :class:`~sdw.errors.HardError` and aborts the build. Warn-and-skip
+would invent a third outcome in a two-outcome pipeline and make a missing PNG indistinguishable
+from one never rendered.
+"""
+
+from pathlib import Path
+from typing import Any, cast
+
+import matplotlib
+import numpy as np
+import numpy.typing as npt
+from scipy.signal import ShortTimeFFT
+from scipy.signal.windows import hann
+
+from sdw.errors import HardError
+from sdw.ingest import Recording
+from sdw.normalize import NormalizedAudio
+from sdw.quality import QualityMetrics
+
+# Headless, and set before pyplot is imported so no display backend is ever probed.
+matplotlib.use("Agg")
+
+import matplotlib.pyplot as plt  # noqa: E402  (must follow the backend selection)
+
+# Figure geometry (ADR-0011). Wide suits a time series; the spectrogram is taller for its frequency
+# axis and colorbar. 100 DPI keeps each PNG in the ~50-150 KB band.
+DPI = 100
+WAVEFORM_FIGSIZE = (10.0, 3.0)
+SPECTROGRAM_FIGSIZE = (10.0, 4.0)
+WAVEFORM_SIZE_PX = (int(WAVEFORM_FIGSIZE[0] * DPI), int(WAVEFORM_FIGSIZE[1] * DPI))
+SPECTROGRAM_SIZE_PX = (int(SPECTROGRAM_FIGSIZE[0] * DPI), int(SPECTROGRAM_FIGSIZE[1] * DPI))
+
+# The two absolute scales, and the reason this module exists in the shape it does. Neither is a
+# function of the signal being plotted.
+WAVEFORM_YLIM = (-1.0, 1.0)
+DB_RANGE = (-80.0, 0.0)
+
+# STFT framing: 25 ms window / 10 ms hop / Hann — the Whisper/NeMo/Kaldi frontend convention, so
+# what an operator reads is what a v0.2 model eats. 201 bins spanning 0 .. 8 kHz, fixed by the
+# 16 kHz Normalized rate.
+N_FFT = 400
+HOP = 160
+
+# `magma`: perceptually uniform, colorblind-safe, greyscale-safe, and the conventional map for a
+# dB spectrogram.
+COLORMAP = "magma"
+
+# The dB floor for `20*log10(0)`, which is otherwise -inf. Well below `DB_RANGE`'s bottom, so it
+# clamps to the darkest colour like any other inaudible bin — this is a plotting guard, not a
+# measurement (ADR-0007 owns the reported -120 floor).
+_MAGNITUDE_FLOOR = 1e-12
+
+# Rendered precision, matching ADR-0007's: dBFS 2 dp, seconds 3 dp. Fixed decimal places rather
+# than `round`, so a column of numbers stays the same width.
+_DBFS_DP = 2
+_SECONDS_DP = 3
+
+# The filename suffixes. Images share the `recording_id` stem with the audio and the quality row,
+# so every artifact for a Recording is one `ls` away (ADR-0003).
+WAVEFORM_SUFFIX = ".waveform.png"
+SPECTROGRAM_SUFFIX = ".spectrogram.png"
+
+# Everything the render depends on that matplotlib would otherwise read from a user's matplotlibrc.
+# Fonts are pinned to matplotlib's bundled DejaVu family: a system font list would resolve
+# differently per machine and, worse, per machine over time.
+_RC_PARAMS: dict[str, Any] = {
+    "figure.dpi": DPI,
+    "savefig.dpi": DPI,
+    "savefig.bbox": None,
+    "savefig.pad_inches": 0.0,
+    "savefig.transparent": False,
+    "figure.facecolor": "white",
+    "axes.facecolor": "white",
+    "font.family": "sans-serif",
+    "font.sans-serif": ["DejaVu Sans"],
+    "font.size": 9.0,
+    "axes.titlesize": 9.0,
+    "axes.labelsize": 8.0,
+    "xtick.labelsize": 7.0,
+    "ytick.labelsize": 7.0,
+    "axes.grid": False,
+    "axes.linewidth": 0.8,
+    "lines.linewidth": 0.5,
+    "lines.antialiased": True,
+    "text.usetex": False,
+    "path.simplify": True,
+    "path.simplify_threshold": 1.0 / 9.0,
+    "agg.path.chunksize": 0,
+}
+
+# `Software: Matplotlib version X` is the one non-deterministic chunk matplotlib's PNG writer adds
+# by default; it writes no timestamp. Setting it to None omits it, so a matplotlib upgrade does not
+# change every byte of every image.
+_PNG_METADATA: dict[str, Any] = {"Software": None}
+
+# Fixed axes rectangles, in figure coordinates. Pinned rather than left to a layout engine so the
+# plotted area is identical in every image regardless of tick-label width — and so the colorbar
+# never shrinks the spectrogram's axes by an amount that depends on the data.
+_WAVEFORM_AXES = (0.06, 0.17, 0.92, 0.70)
+_SPECTROGRAM_AXES = (0.06, 0.13, 0.84, 0.77)
+_COLORBAR_AXES = (0.92, 0.13, 0.02, 0.77)
+
+
+def image_paths(recording_id: str, out_dir: Path) -> tuple[Path, Path]:
+    """The two paths :func:`render` writes for ``recording_id``, waveform first.
+
+    The naming rule in one place, so a caller that needs to name an Image — a report, a test — does
+    not restate the convention and drift from it.
+    """
+    return (
+        out_dir / f"{recording_id}{WAVEFORM_SUFFIX}",
+        out_dir / f"{recording_id}{SPECTROGRAM_SUFFIX}",
+    )
+
+
+def render(
+    audio: NormalizedAudio,
+    metrics: QualityMetrics,
+    recording: Recording,
+    out_dir: Path,
+) -> None:
+    """Write both PNGs for ``recording`` into ``out_dir``, creating it if absent.
+
+    ``metrics`` is rendered, never recomputed: this signature is the mechanism, not a convention —
+    the values in the title can only be the quality stage's (ADR-0012). Raises
+    :class:`~sdw.errors.HardError` if either render or write fails, which aborts the build and
+    keeps `images/` a 1:1 mirror of the Manifest — a build never emits a partial `images/`.
+    """
+    waveform_path, spectrogram_path = image_paths(recording.recording_id, out_dir)
+    heading = title(recording, metrics)
+    try:
+        out_dir.mkdir(parents=True, exist_ok=True)
+        # `rc_context` is typed with a Literal key union that a module-level dict cannot satisfy;
+        # every key below is a real rcParam, and a typo would raise at render time.
+        with plt.rc_context(_RC_PARAMS):  # type: ignore[arg-type]
+            _render_waveform(audio.samples, audio.sample_rate, heading, waveform_path)
+            _render_spectrogram(audio.samples, audio.sample_rate, heading, spectrogram_path)
+    except Exception as error:
+        raise HardError(f"could not render images for {recording.recording_id}: {error}") from error
+
+
+def title(recording: Recording, metrics: QualityMetrics) -> str:
+    """The one-line heading both Images carry: identity, then measurements.
+
+    Self-contained enough to read a level off the picture without opening `quality.jsonl`, and
+    nothing more. The flags are deliberately absent — rendering them would couple this stage to
+    `[quality]` thresholds, redraw every PNG when one moved, and duplicate a verdict into two
+    artifacts that can drift apart. The prompt text is deliberately absent too: an
+    arbitrary-length sentence forces wrapping and font-metric layout, the most determinism-hostile
+    thing available.
+    """
+    return (
+        f"{recording.recording_id} | {recording.speaker_id} | {recording.session_id} | "
+        f"{metrics.duration_s:.{_SECONDS_DP}f} s | "
+        f"peak (orig) {metrics.peak_dbfs:.{_DBFS_DP}f} dBFS | "
+        f"RMS (active) {metrics.active_rms_dbfs:.{_DBFS_DP}f} dBFS"
+    )
+
+
+def _render_waveform(
+    samples: npt.NDArray[np.float64], sample_rate: int, heading: str, path: Path
+) -> None:
+    """Amplitude against time, on a y-axis that is never a function of the signal.
+
+    y is fixed at full scale because level is invisible otherwise: autoscale draws a -45 dBFS
+    whisper and a -1 dBFS shout as the identical picture, silently contradicting `low_volume` —
+    the single most common reason to open one of these. x is per-recording precisely because
+    duration is *not* hidden: it is a manifest field, a summary number, and its own flag.
+    """
+    duration_s = len(samples) / sample_rate
+    times = np.arange(len(samples), dtype=np.float64) / sample_rate
+
+    figure = plt.figure(figsize=WAVEFORM_FIGSIZE)
+    try:
+        axes = figure.add_axes(_WAVEFORM_AXES)
+        axes.plot(times, samples, color="#1f77b4")
+        axes.set_xlim(0.0, duration_s)
+        axes.set_ylim(*WAVEFORM_YLIM)
+        axes.set_xlabel("time (s)")
+        axes.set_ylabel("amplitude (full scale)")
+        axes.set_title(heading)
+        figure.savefig(path, format="png", metadata=_PNG_METADATA)
+    finally:
+        plt.close(figure)
+
+
+def _render_spectrogram(
+    samples: npt.NDArray[np.float64], sample_rate: int, heading: str, path: Path
+) -> None:
+    """Energy against time and frequency, on a colour scale that is never a function of the signal.
+
+    Per-image dB normalization (dB relative to this file's own max, the common default) re-lies
+    about level exactly as waveform autoscale does, and would put the spectrogram in direct
+    contradiction with the fixed-scale waveform sitting beside it. The scale here is absolute, so
+    the same colour means the same energy in any two Images and a quiet Recording renders dim.
+    """
+    duration_s = len(samples) / sample_rate
+    decibels, span = _stft_dbfs(samples, sample_rate)
+
+    figure = plt.figure(figsize=SPECTROGRAM_FIGSIZE)
+    try:
+        axes = figure.add_axes(_SPECTROGRAM_AXES)
+        mesh = axes.imshow(
+            decibels,
+            origin="lower",
+            aspect="auto",
+            interpolation="nearest",
+            extent=(span[0], span[1], 0.0, sample_rate / 2),
+            cmap=COLORMAP,
+            vmin=DB_RANGE[0],
+            vmax=DB_RANGE[1],
+        )
+        # The x-axis is the waveform's, not the data's: the two Images of one Recording must align
+        # in time, so the few milliseconds of unsupported frames at each end are left blank rather
+        # than allowed to shift the axis.
+        axes.set_xlim(0.0, duration_s)
+        axes.set_xlabel("time (s)")
+        axes.set_ylabel("frequency (Hz)")
+        axes.set_title(heading)
+        colorbar = figure.colorbar(mesh, cax=figure.add_axes(_COLORBAR_AXES))
+        colorbar.set_label("magnitude (dBFS)")
+        figure.savefig(path, format="png", metadata=_PNG_METADATA)
+    finally:
+        plt.close(figure)
+
+
+def _stft_dbfs(
+    samples: npt.NDArray[np.float64], sample_rate: int
+) -> tuple[npt.NDArray[np.float64], tuple[float, float]]:
+    """The STFT magnitude in absolute dBFS clamped to :data:`DB_RANGE`, and the seconds it spans.
+
+    Magnitude is scaled by ``2 / sum(window)`` so a bin's value is the amplitude of the sinusoid
+    that produced it, on the same 0 .. 1 full-scale ruler the waveform uses — that is what makes
+    the dB value *absolute* and comparable across images rather than an arbitrary FFT scale. The
+    dB conversion is ADR-0007's raw ``20*log10``, with a magnitude floor standing in for -inf.
+    Clamping (rather than letting matplotlib clip) makes the rendered range explicit in the data.
+
+    Only frames whose whole window lies inside the Recording are kept. The border frames a
+    zero-padded STFT also produces see a window that is part signal and part silence, which reads
+    as a broadband vertical stripe at each end — a picture of the padding, not of the audio, and
+    exactly the kind of artifact an operator would otherwise have to learn to ignore.
+    """
+    window = hann(N_FFT, sym=False)
+    transform = ShortTimeFFT(window, hop=HOP, fs=sample_rate, scale_to=None, fft_mode="onesided")
+    first = transform.lower_border_end[1]
+    last = max(first + 1, transform.upper_border_begin(len(samples))[1])
+    magnitude = np.abs(transform.stft(samples, p0=first, p1=last)) * (2.0 / window.sum())
+    decibels = 20.0 * np.log10(np.maximum(magnitude, _MAGNITUDE_FLOOR))
+    times = transform.t(len(samples), p0=first, p1=last)
+    span = (float(times[0]), float(times[-1]))
+    return cast("npt.NDArray[np.float64]", np.clip(decibels, *DB_RANGE)), span

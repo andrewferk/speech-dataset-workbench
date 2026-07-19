@@ -172,6 +172,30 @@ def leading_trailing_silence(
     sf.write(path, _to_channels(mono, channels), sample_rate, subtype=subtype)
 
 
+_CSV_DEFAULTS = {
+    "speaker_id": "spk_a",
+    "session_id": "sess_1",
+    "prompt_text": "Hello there.",
+    "device": "mic",
+    "environment": "quiet room",
+}
+
+
+def write_recordings_csv(root: Path, rows: list[dict[str, str]]) -> Path:
+    """Write ``recordings.csv`` at ``root`` from ``rows``, filling unstated columns with defaults.
+
+    A row states only what its test is about — usually just ``path`` — because the metadata columns
+    are rarely the subject and spelling all six out per row buries the one that matters. Returns
+    ``root`` for use as ``--data-in``.
+    """
+    root.mkdir(parents=True, exist_ok=True)
+    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
+        writer.writeheader()
+        writer.writerows({**_CSV_DEFAULTS, **row} for row in rows)
+    return root
+
+
 def write_minimal_data_in(root: Path) -> Path:
     """The smallest input that survives the whole preflight: one CSV row, one real WAV.
 
@@ -190,20 +214,7 @@ def write_minimal_data_in(root: Path) -> Path:
         bit_depth=16,
         channels=1,
     )
-    with (root / "recordings.csv").open("w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=_CSV_COLUMNS)
-        writer.writeheader()
-        writer.writerow(
-            {
-                "path": "a.wav",
-                "speaker_id": "spk_a",
-                "session_id": "sess_1",
-                "prompt_text": "Hello there.",
-                "device": "mic",
-                "environment": "quiet room",
-            }
-        )
-    return root
+    return write_recordings_csv(root, [{"path": "a.wav"}])
 
 
 # --- Abort-case inputs (structural failures that must abort a build, ADR-0005/ADR-0007) ------
