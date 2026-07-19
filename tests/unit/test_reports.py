@@ -54,7 +54,7 @@ def _recording(recording_id: str, speaker_id: str, session_id: str) -> Recording
     )
 
 
-def _corpus(sessions: int, *, speakers: int = 1, per_session: int = 3) -> list[Recording]:
+def _dataset(sessions: int, *, speakers: int = 1, per_session: int = 3) -> list[Recording]:
     """``sessions`` Sessions of ``per_session`` Recordings, dealt round-robin across speakers."""
     return [
         _recording(f"rec_{s:02d}{i:02d}", f"spk_{s % speakers:02d}", f"sess_{s:02d}")
@@ -116,7 +116,7 @@ class TestSplitTable:
     """The target beside the realized count, on every build — no threshold, no conditional."""
 
     def test_table_prints_when_nothing_is_wrong(self) -> None:
-        recordings = _corpus(4)
+        recordings = _dataset(4)
         summary = render_summary(
             [(r.recording_id, _metrics()) for r in recordings], _split(recordings)
         )
@@ -126,7 +126,7 @@ class TestSplitTable:
 
     def test_target_and_realized_are_both_shown_with_percentages(self) -> None:
         """ADR-0004's worked example: 12 Samples over 4 equal Sessions, 80-10-10 configured."""
-        recordings = _corpus(4)
+        recordings = _dataset(4)
         summary = render_summary([], _split(recordings))
         assert "9.6 (80%)" in summary
         assert "1.2 (10%)" in summary
@@ -137,7 +137,7 @@ class TestRepairDisclosure:
     """One report-only line per repair move (ADR-0004)."""
 
     def test_each_move_is_disclosed_by_session_donor_and_recipient(self) -> None:
-        recordings = _corpus(4)
+        recordings = _dataset(4)
         result = _split(recordings)
         summary = render_summary([], result)
         assert result.moves, "the worked example is expected to repair"
@@ -148,19 +148,19 @@ class TestRepairDisclosure:
             )
 
     def test_no_repair_means_no_repair_lines(self) -> None:
-        summary = render_summary([], _split(_corpus(1)))
+        summary = render_summary([], _split(_dataset(1)))
         assert "non-emptiness repair" not in summary
 
 
 class TestSpeakerOverlap:
-    """Suppressed entirely for a single-speaker corpus (ADR-0004)."""
+    """Suppressed entirely for a single-speaker Dataset (ADR-0004)."""
 
     def test_suppressed_for_a_single_speaker(self) -> None:
-        summary = render_summary([], _split(_corpus(4, speakers=1)))
+        summary = render_summary([], _split(_dataset(4, speakers=1)))
         assert "speaker-independent" not in summary
 
     def test_noted_when_a_speaker_spans_splits_and_others_exist(self) -> None:
-        recordings = _corpus(4, speakers=2)
+        recordings = _dataset(4, speakers=2)
         result = _split(recordings)
         summary = render_summary([], result)
         assert result.speaker_overlaps, "two speakers over three splits must overlap"
@@ -185,21 +185,21 @@ class TestMinSessionsWarning:
     """Below three Sessions the warning appears in both sections of the summary (ADR-0004)."""
 
     def test_warning_appears_in_both_the_quality_and_split_sections(self) -> None:
-        summary = render_summary([("rec_a", _metrics())], _split(_corpus(2)))
+        summary = render_summary([("rec_a", _metrics())], _split(_dataset(2)))
         assert summary.count("WARNING:") == 2
         # One before the quality tally, one in the split section after the table.
         assert summary.index("WARNING:") < summary.index("Quality:")
         assert summary.rindex("WARNING:") > summary.index("split")
 
     def test_absent_at_three_or_more_sessions(self) -> None:
-        assert "WARNING:" not in render_summary([], _split(_corpus(3)))
+        assert "WARNING:" not in render_summary([], _split(_dataset(3)))
 
 
 class TestDeterminism:
     """No wall-clock, no host facts — ADR-0008's golden comparison depends on it."""
 
     def test_rendering_twice_is_byte_identical(self) -> None:
-        recordings = _corpus(4, speakers=2)
+        recordings = _dataset(4, speakers=2)
         results = [(r.recording_id, _metrics(flags=("clipping",))) for r in recordings]
         first = render_summary(results, _split(recordings))
         assert first == render_summary(results, _split(recordings))
@@ -212,7 +212,7 @@ class TestDeterminism:
 class TestFormattingHelpers:
     """The two guards that keep the table and the note readable at their edges."""
 
-    def test_percent_of_an_empty_corpus_is_zero_not_a_division_error(self) -> None:
+    def test_percent_of_an_empty_dataset_is_zero_not_a_division_error(self) -> None:
         assert _percent(0.0, 0) == "0%"
 
     def test_a_single_split_name_is_not_given_a_dangling_conjunction(self) -> None:
@@ -226,7 +226,7 @@ class TestWriteReports:
     """Both artifacts land in the staging tree under their spec'd names (ADR-0003)."""
 
     def test_writes_both_files(self, tmp_path: Path) -> None:
-        recordings = _corpus(4)
+        recordings = _dataset(4)
         results = [(r.recording_id, _metrics()) for r in recordings]
         directory = tmp_path / "reports"
         write_reports(directory, results, _split(recordings))

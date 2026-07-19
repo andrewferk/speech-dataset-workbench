@@ -1,14 +1,16 @@
 """The two commands' internals.
 
 Still partly stubs: they hold the shape (a pure function of `--data-in` plus config) and the
-hard-error contract. Five real stages have landed — ingest, which reads `recordings.csv`, resolves
+hard-error contract. Six real stages have landed — ingest, which reads `recordings.csv`, resolves
 the Originals, and derives their identity (#24); normalization, which decodes each Original and
 converts it to mono 16 kHz in memory (#25); quality, which measures each Recording and derives its
-advisory flags (#26); splitting, which assigns every Session to exactly one Split (#27); and
-images, which renders two PNGs per Recording (#31). The first three complete `validate`, which
-prints the quality digest and still writes nothing, anywhere. Splitting and images are `build`-only
-— images are why `build` stages and commits a tree at all. The remaining stages — the manifest,
-`dataset.json`, the reports — are later tickets, and all of them are on the `build` side too.
+advisory flags (#26); splitting, which assigns every Session to exactly one Split (#27); images,
+which renders two PNGs per Recording (#31); and reporting, which writes `reports/quality.jsonl` and
+`reports/summary.txt` (#32). The first three complete `validate`, which prints the quality digest
+and still writes nothing, anywhere. The last three are `build`-only — images are why `build` stages
+and commits a tree at all, and reporting is what makes that tree explicable on its own. The
+remaining stages — the manifest and `dataset.json` — are later tickets, and both are on the `build`
+side too.
 """
 
 import shutil

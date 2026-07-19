@@ -3,7 +3,7 @@
 `reports/` is written by `build` and only by `build`: `validate` prints the same quality digest to
 stdout and writes nothing, anywhere (ADR-0002). And because a build lands as one atomic commit, an
 abort leaves no `reports/` at all — a half-written `quality.jsonl` would be indistinguishable from
-a corpus that genuinely had fewer Recordings, which is exactly the confusion the file exists to
+a Dataset that genuinely had fewer Recordings, which is exactly the confusion the file exists to
 prevent.
 
 These tests assert placement and atomicity. What the two files *say* is `test_reports.py`.

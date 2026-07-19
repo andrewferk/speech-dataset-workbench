@@ -8,7 +8,7 @@ Four facts pin the shape:
 
 - **Two artifacts because there are two readers.** `quality.jsonl` is one row per kept Recording,
   sorted by `id` and joinable to the manifest on it, for a consumer that filters; `summary.txt` is
-  a digest that omits clean Recordings, for an operator who wants the state of a corpus at a
+  a digest that omits clean Recordings, for an operator who wants the state of a Dataset at a
   glance. Neither is derivable from the other without work, so both are written (ADR-0007).
 
 - **Every disclosure prints unconditionally.** The split table appears on every build with no
@@ -34,19 +34,18 @@ import json
 from collections.abc import Sequence
 from pathlib import Path
 
-from sdw.quality import QualityMetrics, render_digest
+from sdw.quality import DBFS_DP, RATIO_DP, SECONDS_DP, QualityMetrics, render_digest
 from sdw.split import MIN_SESSIONS_FOR_REPAIR, SPLIT_ORDER, SpeakerOverlap, SplitResult
 
 REPORTS_DIR = "reports"
 QUALITY_JSONL = "quality.jsonl"
 SUMMARY_TXT = "summary.txt"
 
-# Decimal places per field *type*, not per field: dBFS 2, ratios 4, seconds 3 (ADR-0007). Rounding
-# at render is what lets the file be an exact golden — two runs that agree to within a float ULP
-# still serialize identically, so no test needs a tolerance.
-_DBFS_DP = 2
-_RATIO_DP = 4
-_SECONDS_DP = 3
+# Decimal places per field *type*, not per field (ADR-0007). Imported from :mod:`sdw.quality`
+# rather than restated, because the digest and this file round the same full-precision numbers and
+# a drift between them would put two different values for one metric in one build. Rounding at
+# render is what lets the file be an exact golden — two runs that agree to within a float ULP still
+# serialize identically, so no test needs a tolerance.
 
 # The row's numeric fields: key order *and* precision in one table, because they are one decision.
 # Two parallel structures would let a key exist with no precision beside it, and that mismatch would
@@ -54,13 +53,13 @@ _SECONDS_DP = 3
 # and `flags` trails around them — the file is sorted by `id` and joined on it, and `flags` is the
 # only variable-length field (ADR-0007).
 _METRIC_FIELDS = (
-    ("duration_s", _SECONDS_DP),
-    ("peak_dbfs", _DBFS_DP),
-    ("clip_ratio", _RATIO_DP),
-    ("active_rms_dbfs", _DBFS_DP),
-    ("leading_silence_s", _SECONDS_DP),
-    ("trailing_silence_s", _SECONDS_DP),
-    ("silence_ratio", _RATIO_DP),
+    ("duration_s", SECONDS_DP),
+    ("peak_dbfs", DBFS_DP),
+    ("clip_ratio", RATIO_DP),
+    ("active_rms_dbfs", DBFS_DP),
+    ("leading_silence_s", SECONDS_DP),
+    ("trailing_silence_s", SECONDS_DP),
+    ("silence_ratio", RATIO_DP),
 )
 
 QUALITY_KEYS = ("id", *(key for key, _ in _METRIC_FIELDS), "flags")
@@ -97,7 +96,7 @@ def render_quality_jsonl(results: Sequence[tuple[str, QualityMetrics]]) -> str:
     is the worklist, and it is the one that omits them.
 
     Sorted by `id` rather than by input order so that the file is stable under a reordering of
-    `recordings.csv` — the same corpus described in a different row order yields the same bytes.
+    `recordings.csv` — the same Dataset described in a different row order yields the same bytes.
     """
     rows = sorted(results, key=lambda result: result[0])
     return "".join(
@@ -127,8 +126,8 @@ def render_summary(results: Sequence[tuple[str, QualityMetrics]], split_result: 
     """The operator's digest: the quality section, then the split section.
 
     The below-three-Sessions warning appears in *both* sections rather than once (ADR-0004). It is a
-    fact about the corpus that changes how either section should be read — the split table's
-    realized counts and the quality tally are both describing a corpus too small to partition — and
+    fact about the Dataset that changes how either section should be read — the split table's
+    realized counts and the quality tally are both describing a Dataset too small to partition — and
     an operator scanning to the section they came for must not be able to miss it. It is prefixed
     here rather than passed into :func:`~sdw.quality.render_digest`, so that `validate`, which never
     runs the splitter, cannot end up with a digest that differs from `build`'s by a parameter it has
@@ -143,7 +142,7 @@ def render_summary(results: Sequence[tuple[str, QualityMetrics]], split_result: 
 
 
 def _min_sessions_warning(split_result: SplitResult) -> tuple[str, ...]:
-    """The unmissable warning for a corpus below :data:`~sdw.split.MIN_SESSIONS_FOR_REPAIR`.
+    """The unmissable warning for a Dataset below :data:`~sdw.split.MIN_SESSIONS_FOR_REPAIR`.
 
     Produce-and-flag: a three-way split of two Sessions is arithmetically impossible, so the build
     assigns what it can, emits valid empty Splits, and says so — it never aborts (ADR-0004). Empty
@@ -204,7 +203,7 @@ def _overlap_note(overlap: SpeakerOverlap) -> str:
 def _split_table(split_result: SplitResult) -> list[str]:
     """The configured target beside the realized count, on every build (ADR-0004, #19).
 
-    Cell widths are computed from the rendered content rather than fixed, so a corpus of a hundred
+    Cell widths are computed from the rendered content rather than fixed, so a Dataset of a hundred
     thousand Samples keeps its columns aligned instead of overflowing a hand-chosen constant. The
     percentage is shown next to both numbers because that is the comparison being invited: `9.6
     (80%)` against `6 (50%)` names the 30-point miss the raw counts only imply.
@@ -231,7 +230,7 @@ def _split_table(split_result: SplitResult) -> list[str]:
 
 
 def _percent(value: float, total: int) -> str:
-    """``value`` as a whole-number percentage of ``total``; ``0%`` for an empty corpus.
+    """``value`` as a whole-number percentage of ``total``; ``0%`` for an empty Dataset.
 
     Whole numbers because the comparison the table invites is coarse — 80 against 50 — and a second
     decimal place would widen every cell to say nothing an operator acts on.

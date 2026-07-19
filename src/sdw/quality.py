@@ -61,11 +61,13 @@ FLAG_DURATION_OUT_OF_RANGE = "duration_out_of_range"
 FLAGS = (FLAG_CLIPPING, FLAG_LOW_VOLUME, FLAG_DURATION_OUT_OF_RANGE)
 
 # Precision for every rendered form of these metrics (ADR-0007): dBFS 2 dp, ratios 4 dp, seconds
-# 3 dp. Applied at render time rather than at measurement, so the digest and a later quality.jsonl
-# round one set of full-precision numbers the same way instead of rounding twice.
-_DBFS_DP = 2
-_RATIO_DP = 4
-_SECONDS_DP = 3
+# 3 dp. Applied at render time rather than at measurement, so the digest and `quality.jsonl` round
+# one set of full-precision numbers the same way instead of rounding twice. Public because
+# :mod:`sdw.reports` renders the same metrics and must agree by construction rather than by two
+# modules happening to hold the same literals (#32).
+DBFS_DP = 2
+RATIO_DP = 4
+SECONDS_DP = 3
 
 
 @dataclass(frozen=True)
@@ -301,12 +303,11 @@ def _evidence(flag: str, metrics: QualityMetrics) -> str:
     """
     if flag == FLAG_CLIPPING:
         return (
-            f"peak={metrics.peak_dbfs:.{_DBFS_DP}f}dBFS "
-            f"clip_ratio={metrics.clip_ratio:.{_RATIO_DP}f}"
+            f"peak={metrics.peak_dbfs:.{DBFS_DP}f}dBFS clip_ratio={metrics.clip_ratio:.{RATIO_DP}f}"
         )
     if flag == FLAG_LOW_VOLUME:
-        return f"active_rms={metrics.active_rms_dbfs:.{_DBFS_DP}f}dBFS"
+        return f"active_rms={metrics.active_rms_dbfs:.{DBFS_DP}f}dBFS"
     # `flags` only ever holds names from :data:`FLAGS`, and the vocabulary is exactly three, so the
     # remaining case is duration. A fourth flag would be an ADR-0007 change, and this cascade is
     # one of the places that would have to change with it.
-    return f"duration={metrics.duration_s:.{_SECONDS_DP}f}s"
+    return f"duration={metrics.duration_s:.{SECONDS_DP}f}s"
