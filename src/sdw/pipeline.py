@@ -1,18 +1,21 @@
 """The two commands' internals.
 
-Mostly stubs still: they hold the shape (a pure function of `--data-in` plus config) and the
-hard-error contract. Two real stages have landed — ingest, which reads `recordings.csv`, resolves
-the Originals, and derives their identity (#24), and normalization, which decodes each Original and
-converts it to mono 16 kHz in memory (#25). The remaining stages — quality, splitting, manifest,
-images — land in later tickets.
+Still partly stubs: they hold the shape (a pure function of `--data-in` plus config) and the
+hard-error contract. Three real stages have landed — ingest, which reads `recordings.csv`, resolves
+the Originals, and derives their identity (#24); normalization, which decodes each Original and
+converts it to mono 16 kHz in memory (#25); and quality, which measures each Recording and derives
+its advisory flags (#26). That completes `validate`, which now prints the quality digest. The
+remaining stages — splitting, manifest, reports, images — land in later tickets, and all of them
+are on the `build` side.
 """
 
 from pathlib import Path
 
-from sdw import ingest, normalize
+from sdw import ingest, normalize, quality
 from sdw.config import Config, load_config
 from sdw.errors import HardError
 from sdw.ingest import Recording
+from sdw.quality import QualityMetrics
 
 
 def _check_paths(data_in: Path, config: Path | None) -> None:
@@ -37,30 +40,42 @@ def _preflight(data_in: Path, config: Path | None) -> tuple[Config, list[Recordi
     return resolved, recordings
 
 
-def _normalize_all(data_in: Path, recordings: list[Recording]) -> None:
-    """Normalize every Recording's Original in memory, one at a time, and discard it (#25).
+def _normalize_and_measure(
+    data_in: Path, recordings: list[Recording], config: Config
+) -> list[tuple[str, QualityMetrics]]:
+    """Normalize and measure every Recording, one at a time, keeping only its metrics (#25, #26).
 
     One Recording's audio is decoded at a time — a Dataset's worth of float64 does not fit
-    comfortably in memory, and no stage needs more than one at once. Nothing is kept yet: what this
-    buys today is ADR-0005's decode gate, which lives in normalization and so fires for *both*
-    commands. A non-WAV, corrupt, truncated, or zero-frame Original aborts the run here. Later
-    tickets hang the quality tap and the `--data-out` write off this same loop.
+    comfortably in memory, and no stage needs more than one at once; only the seven numbers
+    survive the iteration. Two things happen in this loop, and both must happen for *either*
+    command: ADR-0005's decode gate fires here (a non-WAV, corrupt, truncated, or zero-frame
+    Original aborts the run), and the quality tap reads the Original and the Normalized while both
+    are in hand. Nothing here branches on a flag — measuring is all it does.
     """
-    for recording in recordings:
-        normalize.normalize(data_in / recording.path)
+    return [
+        (
+            recording.recording_id,
+            quality.measure(normalize.normalize(data_in / recording.path), config.quality),
+        )
+        for recording in recordings
+    ]
 
 
 def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
     """Transform `data_in` into `data_out` as one atomic commit (ADR-0003)."""
-    _, recordings = _preflight(data_in, config)
-    _normalize_all(data_in, recordings)
+    resolved, recordings = _preflight(data_in, config)
+    # Measured but not yet written: `reports/quality.jsonl` and the `summary.txt` quality section
+    # are the reporting ticket's (#27), which renders these same metrics.
+    _normalize_and_measure(data_in, recordings, resolved)
 
 
 def validate(*, data_in: Path, config: Path | None) -> None:
-    """Preflight `data_in` and print the quality digest. Writes nothing, anywhere (ADR-0002).
+    """Preflight `data_in`, print the quality digest, and write nothing, anywhere (ADR-0002).
 
-    Normalization runs here in full and the result is discarded: `validate`'s promise is that a
+    Normalization runs here in full and the audio is discarded: `validate`'s promise is that a
     green run means `build` will not hit a hard error, so it has to decode every Original too.
+    Quality flags are advisory and never affect the exit code — a flagged Recording still exits 0,
+    because the operator curates by editing `recordings.csv`, not by the tool refusing to proceed.
     """
-    _, recordings = _preflight(data_in, config)
-    _normalize_all(data_in, recordings)
+    resolved, recordings = _preflight(data_in, config)
+    print(quality.render_digest(_normalize_and_measure(data_in, recordings, resolved)), end="")

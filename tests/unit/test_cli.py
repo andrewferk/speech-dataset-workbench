@@ -89,6 +89,45 @@ class TestValidate:
         assert sorted(p.relative_to(tmp_path) for p in tmp_path.rglob("*")) == before
 
 
+class TestValidateDigest:
+    """`validate`'s output contract: the digest goes to stdout, and a flag is never an error.
+
+    The metrics themselves are `test_quality.py`'s subject; what is asserted here is the surface —
+    that the digest reaches stdout at all, and that a flagged Recording still exits 0. That second
+    one is the whole point of the advisory model: `validate` is non-zero only on a structural or
+    split failure, so a corpus full of quiet takes is a report, not a broken CI gate.
+    """
+
+    def test_digest_goes_to_stdout(self, data_in: Path, capsys: pytest.CaptureFixture[str]) -> None:
+        assert main(["validate", "--data-in", str(data_in)]) == 0
+        assert "Quality: 1 recordings — 1 clean, 0 flagged" in capsys.readouterr().out
+
+    def test_a_flagged_recording_still_exits_zero(
+        self, data_in: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # A 0.1 s blip: `duration_out_of_range`, and still a Sample. Nothing is dropped.
+        synth.write_wav(
+            data_in / "a.wav",
+            freq_hz=400.0,
+            amp_dbfs=-18.0,
+            duration_s=0.1,
+            sample_rate=16000,
+            bit_depth=16,
+            channels=1,
+        )
+        assert main(["validate", "--data-in", str(data_in)]) == 0
+        out = capsys.readouterr().out
+        assert "0 clean, 1 flagged" in out
+        assert "duration_out_of_range" in out
+
+    def test_build_prints_no_digest(
+        self, data_in: Path, data_out: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # `build`'s digest belongs in `reports/summary.txt` (#27), not on stdout.
+        assert main(["build", "--data-in", str(data_in), "--data-out", str(data_out)]) == 0
+        assert capsys.readouterr().out == ""
+
+
 class TestDecodeGate:
     """An undecodable Original aborts *both* commands (#25, ADR-0005).
 
