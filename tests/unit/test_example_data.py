@@ -22,6 +22,7 @@ from examples import generate
 from sdw.config import QualityConfig
 from sdw.ingest import COLUMNS, read_recordings
 from sdw.normalize import TARGET_SAMPLE_RATE
+from sdw.quality import CLIP_THRESHOLD
 
 COMMITTED = generate.DATA_IN
 
@@ -89,8 +90,8 @@ def test_every_recording_is_byte_distinct() -> None:
     triples = {(r.freq_hz, r.duration_s, r.amp_dbfs) for r in generate.RECORDINGS}
     assert len(triples) == len(generate.RECORDINGS)
 
-    digests = {(COMMITTED / r.path).read_bytes() for r in generate.RECORDINGS}
-    assert len(digests) == len(generate.RECORDINGS)
+    contents = {(COMMITTED / r.path).read_bytes() for r in generate.RECORDINGS}
+    assert len(contents) == len(generate.RECORDINGS)
 
 
 def test_exactly_one_recording_is_below_the_low_volume_threshold() -> None:
@@ -109,7 +110,7 @@ def test_every_recording_clears_the_other_flags() -> None:
         samples, rate = sf.read(path, dtype="float64", always_2d=False)
         duration_s = len(samples) / rate
         assert config.duration_min_s <= duration_s <= config.duration_max_s, path
-        assert float(np.abs(samples).max()) < 0.99, path
+        assert float(np.abs(samples).max()) < CLIP_THRESHOLD, path
 
 
 def test_audio_is_written_at_the_normalized_target() -> None:
@@ -125,7 +126,9 @@ def test_audio_is_written_at_the_normalized_target() -> None:
 
 def test_recordings_csv_is_the_operators_template() -> None:
     # The demo CSV *is* the bring-your-own template (ADR-0009), so it must carry exactly the
-    # documented column set, in order, with POSIX-relative paths that resolve.
+    # documented column set, in order, with POSIX-relative paths that resolve. Checked against
+    # `sdw.ingest.COLUMNS` — the product's own idea of the contract — rather than against the
+    # generator's copy, which would only prove the generator agrees with itself.
     with (COMMITTED / "recordings.csv").open(newline="", encoding="utf-8") as f:
         rows = list(csv.DictReader(f))
     assert len(rows) == 12

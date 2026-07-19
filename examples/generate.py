@@ -3,9 +3,10 @@
 The corpus an operator builds on their first run, before supplying any audio of their own:
 ``examples/data-in/`` ships a ``recordings.csv`` and twelve WAVs, so ``build --data-in
 examples/data-in`` works straight out of a clone with no downloads. The audio is generated
-tones, not speech — ``examples/README.md`` says so plainly — while the Prompts stay honest
-English sentences, because a Prompt that described its own tone would teach a wrong mental
-model of what a Prompt is.
+tones, not speech — ADR-0009 requires an ``examples/README.md`` to say so plainly and up front,
+and #35 writes it from this corpus's observed output — while the Prompts stay honest English
+sentences, because a Prompt that described its own tone would teach a wrong mental model of what
+a Prompt is.
 
 Tone-writing itself lives in :mod:`tests.synth`, the single source of fixture truth (ADR-0008);
 this module contributes only the *shape*. That shape is chosen to teach, one Recording at a time:
