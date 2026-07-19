@@ -15,7 +15,7 @@ import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-from sdw import images, ingest, normalize, quality, split
+from sdw import images, ingest, normalize, quality, reports, split
 from sdw.config import Config, load_config
 from sdw.errors import HardError
 from sdw.ingest import Recording
@@ -87,25 +87,28 @@ def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
 
     The tree is staged into a sibling `<data-out>.tmp` and committed by rename, so a hard error
     anywhere leaves no durable output and no build is ever visible half-finished. The staging tree
-    currently holds `images/` only — splitting runs here but writes nothing yet; the remaining
-    stages — the manifest, `dataset.json`, the reports — fill it in, and #30 takes ownership of the
-    commit itself, including `dataset.json` as the completeness sentinel.
+    currently holds `images/` and `reports/`; the remaining stages — the manifest and
+    `dataset.json` — fill it in, and #30 takes ownership of the commit itself, including
+    `dataset.json` as the completeness sentinel.
     """
     resolved, recordings = _preflight(data_in, config)
     staging = data_out.with_name(data_out.name + ".tmp")
     shutil.rmtree(staging, ignore_errors=True)
     try:
-        # Measured but not yet written: `reports/quality.jsonl` and the `summary.txt` quality
-        # section are the reporting ticket's (#32), which renders these same metrics.
+        # The metrics are retained across the loop — they are the rows of `reports/quality.jsonl`
+        # (#32) — while the audio is not, since only the renderer needs it and only while it is in
+        # hand. One decode feeds both.
+        measured: list[tuple[str, QualityMetrics]] = []
         for recording, audio, metrics in _measured(data_in, recordings, resolved):
             images.render(audio, metrics, recording, staging / "images")
-        # Likewise computed but not yet written. The splitter runs after normalize + validate on
-        # the fixed surviving set (ADR-0004), so its position here is the contract, not a detail:
-        # a hard error must abort *before* any Session is placed. That is why it follows the loop
-        # above rather than sharing it — the loop is where every decode gate fires (#27). The
-        # manifest (#12) consumes the assignments and `summary.txt` (#10) renders the disclosures
-        # it carries.
-        split.split_sessions(recordings, resolved.split)
+            measured.append((recording.recording_id, metrics))
+        # The splitter runs after normalize + validate on the fixed surviving set (ADR-0004), so
+        # its position here is the contract, not a detail: a hard error must abort *before* any
+        # Session is placed. That is why it follows the loop above rather than sharing it — the
+        # loop is where every decode gate fires (#27). The manifest (#12) consumes the assignments;
+        # the reports render the disclosures it carries.
+        split_result = split.split_sessions(recordings, resolved.split)
+        reports.write_reports(staging / reports.REPORTS_DIR, measured, split_result)
     except BaseException:
         shutil.rmtree(staging, ignore_errors=True)
         raise

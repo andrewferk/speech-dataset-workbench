@@ -257,7 +257,9 @@ def _dbfs(amplitude: float) -> float:
 # --- The human digest ---------------------------------------------------------------------------
 
 
-def render_digest(results: Sequence[tuple[str, QualityMetrics]]) -> str:
+def render_digest(
+    results: Sequence[tuple[str, QualityMetrics]], warnings: Sequence[str] = ()
+) -> str:
     """The human quality digest: a per-flag tally, then one line per ``(Recording, flag)`` pair.
 
     A Recording carrying two flags gets two lines, because the evidence a line states is *per
@@ -271,9 +273,14 @@ def render_digest(results: Sequence[tuple[str, QualityMetrics]]) -> str:
     The tally lists all three flags even at zero, so the digest has one fixed shape: an operator
     diffing two runs sees a count change rather than a line appear, and a zero is itself the useful
     answer to "did anything clip?". Only the flagged *list* is elided when empty.
+
+    ``warnings`` are corpus-level lines the caller wants read *before* any tally, because they
+    change what the tally means. `build` passes the below-three-Sessions warning here (#32);
+    `validate` passes nothing, having never run the splitter that could produce one.
     """
     flagged = [(rid, metrics) for rid, metrics in results if metrics.flags]
-    lines = [
+    lines = list(warnings) + ([""] if warnings else [])
+    lines += [
         f"Quality: {len(results)} recordings — "
         f"{len(results) - len(flagged)} clean, {len(flagged)} flagged"
     ]
