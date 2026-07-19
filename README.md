@@ -93,6 +93,21 @@ python -m <package> build --data-in ./data-in --data-out ./data-out [--config co
 python -m <package> validate --data-in ./data-in [--config config.toml]
 ```
 
+Those commands run as written under [mise](https://mise.jdx.dev), which supplies both halves of
+the environment they assume: the interpreter from uv's `.venv`, and `src/` on the path. Without
+mise, supply them yourself:
+
+```bash
+PYTHONPATH=src uv run python -m <package> validate --data-in ./data-in
+```
+
+`uv run` selects the `.venv` interpreter; `PYTHONPATH=src` is what the src-layout costs, since
+nothing installs the package (ADR-0012) and the interpreter needs `src/` on the path to find the
+entry point. `pytest` and CI set the path themselves — via `pyproject.toml`'s
+`[tool.pytest.ini_options] pythonpath` and the CI workflow — so this applies only to running the
+CLI by hand. See [issue #48](https://github.com/andrewferk/speech-dataset-workbench/issues/48)
+for removing the requirement entirely.
+
 `validate` exits `0` **if and only if** a subsequent `build` on the same input will not hit a hard
 error. All tuning lives in an optional TOML config rather than per-parameter flags, so the CLI stays
 at three flags. See [issue #8](https://github.com/andrewferk/speech-dataset-workbench/issues/8).
