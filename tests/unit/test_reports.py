@@ -132,9 +132,7 @@ class TestAgreementWithTheManifest:
             {recording.recording_id: duration},
             Config(manifest=ManifestConfig(), quality=QualityConfig(), split=SplitConfig()),
         )
-        manifest_line = json.loads(
-            next(text for text in dataset.files.values() if text).splitlines()[0]
-        )
+        manifest_line = json.loads(dataset.files["train.jsonl"].splitlines()[0])
         report_line = json.loads(
             render_quality_jsonl([("rec_a", _metrics(duration_s=duration))]).splitlines()[0]
         )

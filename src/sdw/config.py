@@ -50,9 +50,10 @@ JSON_SEPARATORS = (",", ":")
 # The choice is deliberate and it is the *text* that forces it: `text` carries Prompt text verbatim
 # (ADR-0006), so escaping would make a Manifest of accented or non-Latin prompts unreadable to the
 # operator who has to check it, and would inflate the bytes a consumer decodes for no gain. Every
-# file is written as UTF-8 already, so there is nothing an escape would protect against. No v0.1
-# artifact contains a non-ASCII character today — every field is either hash-derived or drawn from
-# a fixed ASCII vocabulary — which is why unifying on this value changes no emitted byte.
+# file is written as UTF-8 already, so there is nothing an escape would protect against. The
+# Manifest can therefore differ byte for byte on real data, and that is the point; `quality.jsonl`
+# cannot, since every field of it is either hash-derived or drawn from a fixed ASCII vocabulary,
+# which is why unifying the two writers on this value re-baselines no golden.
 JSON_ENSURE_ASCII = False
 
 
