@@ -54,7 +54,7 @@ from scipy.signal.windows import hann
 from sdw.errors import HardError
 from sdw.ingest import Recording
 from sdw.normalize import NormalizedAudio
-from sdw.quality import QualityMetrics
+from sdw.quality import DBFS_DP, SECONDS_DP, QualityMetrics
 
 # Headless, and set before pyplot is imported so no display backend is ever probed.
 matplotlib.use("Agg")
@@ -94,11 +94,6 @@ COLORMAP = "magma"
 # clamps to the darkest colour like any other inaudible bin — this is a plotting guard, not a
 # measurement (ADR-0007 owns the reported -120 floor).
 _MAGNITUDE_FLOOR = 1e-12
-
-# Rendered precision, matching ADR-0007's: dBFS 2 dp, seconds 3 dp. Fixed decimal places rather
-# than `round`, so a column of numbers stays the same width.
-_DBFS_DP = 2
-_SECONDS_DP = 3
 
 # The filename suffixes. Images share the `recording_id` stem with the audio and the quality line,
 # so every artifact for a Recording is one `ls` away (ADR-0003).
@@ -193,12 +188,17 @@ def title(recording: Recording, metrics: QualityMetrics) -> str:
     artifacts that can drift apart. The prompt text is deliberately absent too: an
     arbitrary-length sentence forces wrapping and font-metric layout, the most determinism-hostile
     thing available.
+
+    Precision is ADR-0007's, imported from :mod:`sdw.quality` rather than restated (#54): a title
+    reading 1.23 s beside a `quality.jsonl` line reading 1.234 would describe one Recording in two
+    precisions. Fixed decimal places rather than ``round`` — so a column of numbers keeps one width
+    — is this module's formatting choice; the number of places is not.
     """
     return (
         f"{recording.recording_id} | {recording.speaker_id} | {recording.session_id} | "
-        f"{metrics.duration_s:.{_SECONDS_DP}f} s | "
-        f"peak (orig) {metrics.peak_dbfs:.{_DBFS_DP}f} dBFS | "
-        f"RMS (active) {metrics.active_rms_dbfs:.{_DBFS_DP}f} dBFS"
+        f"{metrics.duration_s:.{SECONDS_DP}f} s | "
+        f"peak (orig) {metrics.peak_dbfs:.{DBFS_DP}f} dBFS | "
+        f"RMS (active) {metrics.active_rms_dbfs:.{DBFS_DP}f} dBFS"
     )
 
 

@@ -30,10 +30,10 @@ Four facts pin the shape:
   are ever reported at all, go to stdout only (ADR-0012).
 """
 
-import json
 from collections.abc import Sequence
 from pathlib import Path
 
+from sdw.config import render_jsonl
 from sdw.quality import DBFS_DP, RATIO_DP, SECONDS_DP, QualityMetrics, render_digest
 from sdw.split import MIN_SESSIONS_FOR_REPAIR, SPLIT_ORDER, SpeakerOverlap, SplitResult
 
@@ -64,10 +64,6 @@ _METRIC_FIELDS = (
 
 QUALITY_KEYS = ("id", *(key for key, _ in _METRIC_FIELDS), "flags")
 
-# `json.dumps` defaults to `", "` and `": "`; ADR-0007's line is compact. The byte format is
-# load-bearing rather than cosmetic — the file is committed as an exact golden.
-_JSON_SEPARATORS = (",", ":")
-
 
 def write_reports(
     directory: Path,
@@ -97,12 +93,12 @@ def render_quality_jsonl(results: Sequence[tuple[str, QualityMetrics]]) -> str:
 
     Sorted by `id` rather than by input order so that the file is stable under a reordering of
     `recordings.csv` — the same Dataset described in a different row order yields the same bytes.
+
+    The join is :func:`~sdw.config.render_jsonl`, shared with the Manifest, so this file and
+    `train.jsonl` cannot come to disagree about the JSONL byte format (#54).
     """
     ordered = sorted(results, key=lambda result: result[0])
-    return "".join(
-        json.dumps(_line(rid, metrics), separators=_JSON_SEPARATORS) + "\n"
-        for rid, metrics in ordered
-    )
+    return render_jsonl(_line(rid, metrics) for rid, metrics in ordered)
 
 
 def _line(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:

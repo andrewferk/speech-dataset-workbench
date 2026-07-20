@@ -12,8 +12,14 @@ immutable :class:`Config`. Two facts about it are load-bearing:
 - **The config serializes exactly once**, via :meth:`Config.canonical_json`. Those bytes feed
   both the ``dataset_version`` preimage (ADR-0010) and ``dataset.json``'s ``config`` block, so
   the two cannot drift. :meth:`Config.canonical_dict` exposes the same structure for a consumer
-  that embeds it in a larger document, serialized with :data:`CANONICAL_JSON_SEPARATORS` +
+  that embeds it in a larger document, serialized with :data:`JSON_SEPARATORS` +
   ``sort_keys`` so the embedded subtree stays byte-identical to the standalone form.
+
+It is also where the tool's canonical JSON *byte format* is stated, for every artifact and not
+just for the config. That format had to be decided here first — the preimage needs it — and every
+other JSON writer in the tool must make the identical choice, because ADR-0008 compares artifacts
+as exact goldens. Stating it once and importing it is what makes "the Manifest and the quality
+report agree" a property of the code rather than of three modules holding matching literals (#54).
 
 Three sections only — ``[manifest]`` (ADR-0006), ``[quality]`` (ADR-0007), ``[split]``
 (ADR-0004). There is deliberately no ``[normalize]`` and no ``[images]`` (ADR-0005/0011): either
@@ -22,6 +28,7 @@ would fold into the preimage and mint new Dataset identities for byte-identical 
 
 import json
 import tomllib
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, fields
 from pathlib import Path
 from typing import Any
@@ -32,10 +39,41 @@ from sdw.errors import HardError
 # small absolute tolerance rather than for exact equality.
 RATIO_SUM_TOLERANCE = 1e-9
 
-# Canonical JSON: compact, key-sorted, UTF-8 (no \uXXXX escaping). The same settings must be used
-# wherever the config is embedded in a larger document, so the embedded subtree matches the
-# standalone bytes verbatim.
-CANONICAL_JSON_SEPARATORS = (",", ":")
+# The canonical JSON byte format, for every artifact the tool writes (#54).
+#
+# `json.dumps` defaults to `", "` and `": "`; every artifact here is compact. The byte format is
+# load-bearing rather than cosmetic — the files are compared as exact goldens (ADR-0008) and the
+# Manifest bytes are what `dataset_version` hashes (ADR-0010).
+JSON_SEPARATORS = (",", ":")
+
+# UTF-8 throughout, so a non-ASCII character is emitted as itself rather than as a `\uXXXX` escape.
+# The choice is deliberate and it is the *text* that forces it: `text` carries Prompt text verbatim
+# (ADR-0006), so escaping would make a Manifest of accented or non-Latin prompts unreadable to the
+# operator who has to check it, and would inflate the bytes a consumer decodes for no gain. Every
+# file is written as UTF-8 already, so there is nothing an escape would protect against. No v0.1
+# artifact contains a non-ASCII character today — every field is either hash-derived or drawn from
+# a fixed ASCII vocabulary — which is why unifying on this value changes no emitted byte.
+JSON_ENSURE_ASCII = False
+
+
+def render_jsonl(lines: Iterable[Mapping[str, Any]]) -> str:
+    """Objects as JSON Lines: one compact object per line, LF-terminated, no trailing whitespace.
+
+    The one JSONL writer, used by the Manifest, the HF view, and the quality report alike (#54).
+    A shared pair of constants would still let a writer import them and forget to pass one; a
+    shared join makes the byte format something a writer cannot express an opinion about.
+
+    Every line is terminated, so an empty sequence yields an empty file rather than a lone newline,
+    and appending one is always a whole-line change. Key order is the caller's insertion order —
+    ``sort_keys`` is deliberately off, because both ADR-0006's Manifest and ADR-0007's quality line
+    fix an order that is not alphabetical. The config's own preimage is the one JSON in the tool
+    that *is* key-sorted, and it is a single object rather than a line-per-record file, so it
+    serializes through :meth:`Config.canonical_json` instead of through here.
+    """
+    return "".join(
+        json.dumps(line, ensure_ascii=JSON_ENSURE_ASCII, separators=JSON_SEPARATORS) + "\n"
+        for line in lines
+    )
 
 
 @dataclass(frozen=True)
@@ -91,8 +129,8 @@ class Config:
                 "split": vars(self.split),
             },
             sort_keys=True,
-            ensure_ascii=False,
-            separators=CANONICAL_JSON_SEPARATORS,
+            ensure_ascii=JSON_ENSURE_ASCII,
+            separators=JSON_SEPARATORS,
         )
 
     def canonical_dict(self) -> dict[str, Any]:
@@ -100,7 +138,7 @@ class Config:
 
         Derived from :meth:`canonical_json` rather than from the dataclass directly, so its keys
         iterate in the same sorted order as the canonical bytes. Serializing this dict with
-        :data:`CANONICAL_JSON_SEPARATORS` + ``sort_keys`` therefore reproduces the preimage's
+        :data:`JSON_SEPARATORS` + ``sort_keys`` therefore reproduces the preimage's
         ``config`` bytes exactly — the two records cannot drift.
         """
         result: dict[str, Any] = json.loads(self.canonical_json())

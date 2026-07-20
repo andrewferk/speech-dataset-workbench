@@ -28,15 +28,15 @@ Three facts pin the shape:
 model is then literal in the data, and v0.2 populates the slot in place with no schema change.
 """
 
-import json
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, fields
 from pathlib import PurePosixPath
 from typing import Any
 
-from sdw.config import Config
+from sdw.config import Config, render_jsonl
 from sdw.ingest import Recording
 from sdw.normalize import TARGET_SAMPLE_RATE
+from sdw.quality import SECONDS_DP
 from sdw.split import SPLIT_ORDER, SplitResult
 
 # The Normalized audio is mono by construction (ADR-0005). Unlike the sample rate there is no
@@ -44,19 +44,11 @@ from sdw.split import SPLIT_ORDER, SplitResult
 # emitted value is named here.
 NUM_CHANNELS = 1
 
-# Seconds, rounded to milliseconds: finer digits are noise from a float division, and an unrounded
-# duration would put a host-independent-but-ugly repr into a byte-compared artifact (ADR-0006).
-DURATION_DECIMALS = 3
-
 # The audio subtree, and the one place the layout `audio/<split>/<recording_id>.wav` is spelled.
 AUDIO_DIR = "audio"
 
 # The HF `audiofolder` convention: one metadata file per folder of audio, keyed by `file_name`.
 HF_METADATA_NAME = "metadata.jsonl"
-
-# Canonical JSON for one Sample line: compact, UTF-8 (no \uXXXX escaping), and *not* key-sorted —
-# the key order is the ADR's fixed table, carried by `Sample`'s field order, not alphabetical.
-_JSON_SEPARATORS = (",", ":")
 
 # How `Dataset.files` becomes bytes. Named here rather than left to the writer because ADR-0010
 # hashes the emitted bytes: if #30 encoded with anything else, `dataset_version` would stand for a
@@ -164,11 +156,19 @@ def _sample(recording: Recording, split: str, duration: float, config: Config) -
     Prompts are the same and must never reach the transcript a model trains on (ADR-0006). The
     sample rate and channel count describe the Normalized WAV on disk, not the Original — whose
     native format stays recoverable through ``content_hash``.
+
+    ``duration`` is rounded to milliseconds: finer digits are noise from a float division, and an
+    unrounded duration would put a host-independent-but-ugly repr into a byte-compared artifact
+    (ADR-0006). The precision comes from :data:`~sdw.quality.SECONDS_DP` rather than from a local
+    constant because it is the *same* quantity `quality.jsonl` reports for the same Recording, and
+    two names for one decision would let a build ship a Manifest and a report that disagree about
+    a Recording's length (#54). That constant is the only thing this module takes from
+    :mod:`sdw.quality` — the Manifest still carries no quality fields.
     """
     return Sample(
         id=recording.recording_id,
         audio_filepath=audio_path(split, recording.recording_id),
-        duration=round(duration, DURATION_DECIMALS),
+        duration=round(duration, SECONDS_DP),
         text=recording.prompt_text,
         perceived_text=None,
         prompt_id=recording.prompt_id,
@@ -195,10 +195,12 @@ def _files(samples: Sequence[Sample]) -> dict[str, str]:
     HF reads ``val`` as a validation split already, so no Split is renamed (ADR-0003/0006).
     """
     per_split = {name: [s for s in samples if s.split == name] for name in SPLIT_ORDER}
-    files = {f"{name}.jsonl": _jsonl(_line(s) for s in held) for name, held in per_split.items()}
+    files = {
+        f"{name}.jsonl": render_jsonl(_line(s) for s in held) for name, held in per_split.items()
+    }
     files.update(
         {
-            f"{AUDIO_DIR}/{name}/{HF_METADATA_NAME}": _jsonl(_hf_line(s) for s in held)
+            f"{AUDIO_DIR}/{name}/{HF_METADATA_NAME}": render_jsonl(_hf_line(s) for s in held)
             for name, held in per_split.items()
             if held
         }
@@ -231,15 +233,3 @@ def _hf_field(name: str, value: Any) -> tuple[str, Any]:
     if name != "audio_filepath":
         return name, value
     return "file_name", PurePosixPath(value).name
-
-
-def _jsonl(lines: Iterable[Mapping[str, Any]]) -> str:
-    """Sample lines as JSON Lines: LF-terminated, compact separators, no trailing whitespace.
-
-    Every line is terminated, so an empty Split yields an empty file rather than a lone newline,
-    and appending a Sample is always a whole-line change. Key order is the caller's insertion order
-    — ``sort_keys`` is deliberately off, since ADR-0006 fixes an order that is not alphabetical.
-    """
-    return "".join(
-        json.dumps(line, ensure_ascii=False, separators=_JSON_SEPARATORS) + "\n" for line in lines
-    )
