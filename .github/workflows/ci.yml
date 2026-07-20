@@ -10,10 +10,6 @@ on:
 jobs:
   check:
     runs-on: ubuntu-latest
-    # src-layout with no build backend: nothing installs the package, so `python -m sdw`
-    # needs src/ on the path. mise.toml sets the same variable for local development.
-    env:
-      PYTHONPATH: src
     steps:
       - uses: actions/checkout@v4
 
@@ -26,6 +22,13 @@ jobs:
 
       - name: Install the pinned toolchain
         run: uv sync --locked
+
+      # Runs from outside the checkout with no PYTHONPATH set anywhere, asserting the three
+      # properties ADR-0014 buys: the console script resolves, the package imports without
+      # environment help, and the CLI works when the user's data is not in the repo. The
+      # last is the sharp edge that ruled out a flat layout, so it does not go untested.
+      - name: sdw runs from an unrelated directory
+        run: cd "$(mktemp -d)" && uv run --project "$GITHUB_WORKSPACE" sdw --help
 
       - name: ruff
         run: |

@@ -195,9 +195,16 @@ disclosures as four problems; that is a writing problem, and prediction is its f
 ### Release mechanic
 
 `pyproject.toml` carries `version = "0.1.0"` (PEP 621, per the tooling research); `tool_version`
-(ADR-0010) reads it. When every item above holds, **tag `v0.1.0`**. No PyPI, no build backend, no
-changelog — the tooling research chose no build backend unless a packaged CLI is needed, and #8 runs
-the tool as `python -m <package>`.
+(ADR-0010) reads it. When every item above holds, **tag `v0.1.0`**. No PyPI and no changelog.
+
+> **Amended by [ADR-0014](0014-build-backend-and-installed-entry-point.md) (#48).** This paragraph
+> also said *no build backend*, on the grounds that the tooling research chose one only if a
+> packaged CLI is needed. There is now a `hatchling` backend, and the entry point is `sdw` rather
+> than `python -m <package>`. The reason: with nothing installed, `src/` had to be put on the path
+> in four unchecked places — the second-source-of-truth drift this ADR is largely about, displaced
+> into path configuration. ADR-0014 re-reads the no-install property on its own terms first and
+> finds it load-bearing for nothing. **No PyPI and no changelog still hold**, and the backend adds
+> no product behavior beyond the entry point's name.
 
 The tag gives "done" a referent that is not a mood. That matters more here than usual: the only
 thing distinguishing v0.1 from v0.2 in this repository is a set of scope decisions recorded on the

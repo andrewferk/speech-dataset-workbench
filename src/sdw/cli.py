@@ -17,7 +17,9 @@ from sdw.errors import HardError
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="python -m sdw",
+        # Fixed rather than derived: `python -m sdw` would otherwise report `__main__.py`.
+        # `sdw` is the documented entry point, and both doors reach here (ADR-0014).
+        prog="sdw",
         description="Turn a collection of prompted speech recordings into a validated, "
         "reproducible, versioned dataset.",
     )
