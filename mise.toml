@@ -2,6 +2,7 @@
 python = "3.13"
 uv = "latest"
 
+[env]
 # Point `python` at uv's .venv rather than the bare toolchain interpreter, so `sdw`, `python -m sdw`
 # and `pytest` work as documented in the README without a `uv run` prefix. Deps and the package
 # itself come from `uv sync`; `create` only makes the (empty) venv exist.
