@@ -33,8 +33,8 @@ Four facts pin the shape:
 from collections.abc import Sequence
 from pathlib import Path
 
-from sdw.config import render_jsonl
 from sdw.quality import DBFS_DP, RATIO_DP, SECONDS_DP, QualityMetrics, render_digest
+from sdw.serialization import render_jsonl
 from sdw.split import MIN_SESSIONS_FOR_REPAIR, SPLIT_ORDER, SpeakerOverlap, SplitResult
 
 REPORTS_DIR = "reports"
@@ -94,7 +94,7 @@ def render_quality_jsonl(results: Sequence[tuple[str, QualityMetrics]]) -> str:
     Sorted by `id` rather than by input order so that the file is stable under a reordering of
     `recordings.csv` — the same Dataset described in a different row order yields the same bytes.
 
-    The join is :func:`~sdw.config.render_jsonl`, shared with the Manifest, so this file and
+    The join is :func:`~sdw.serialization.render_jsonl`, shared with the Manifest, so this file and
     `train.jsonl` cannot come to disagree about the JSONL byte format (#54).
     """
     ordered = sorted(results, key=lambda result: result[0])

@@ -33,10 +33,11 @@ from dataclasses import dataclass, fields
 from pathlib import PurePosixPath
 from typing import Any
 
-from sdw.config import Config, render_jsonl
+from sdw.config import Config
 from sdw.ingest import Recording
 from sdw.normalize import TARGET_SAMPLE_RATE
 from sdw.quality import SECONDS_DP
+from sdw.serialization import render_jsonl
 from sdw.split import SPLIT_ORDER, SplitResult
 
 # The Normalized audio is mono by construction (ADR-0005). Unlike the sample rate there is no
