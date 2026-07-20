@@ -10,8 +10,9 @@ noise.
 import json
 from pathlib import Path
 
-from sdw.config import SplitConfig
+from sdw.config import Config, ManifestConfig, QualityConfig, SplitConfig
 from sdw.ingest import Recording
+from sdw.manifest import build_dataset
 from sdw.quality import QualityMetrics
 from sdw.reports import (
     QUALITY_JSONL,
@@ -110,6 +111,43 @@ class TestQualityJsonl:
 
     def test_no_recordings_renders_an_empty_file(self) -> None:
         assert render_quality_jsonl([]) == ""
+
+
+class TestAgreementWithTheManifest:
+    """The report and the Manifest describe the same Recordings and must not disagree (#54).
+
+    Both are exact goldens (ADR-0008), so a drift between them would be re-baselined into both
+    files at once and read as intentional. These pin the two decisions they share rather than the
+    constants that carry them, so moving a constant is free and changing one is caught.
+    """
+
+    def test_seconds_precision_is_the_same_in_both_artifacts(self) -> None:
+        # One Recording's length, reported twice. A build that rounded `duration` to 2 dp and
+        # `duration_s` to 3 dp would ship two answers to "how long is this Sample?".
+        duration = 1.23456789
+        recording = _recording("rec_a", "spk_01", "sess_01")
+        dataset = build_dataset(
+            [recording],
+            split_sessions([recording], SplitConfig()),
+            {recording.recording_id: duration},
+            Config(manifest=ManifestConfig(), quality=QualityConfig(), split=SplitConfig()),
+        )
+        manifest_line = json.loads(dataset.files["train.jsonl"].splitlines()[0])
+        report_line = json.loads(
+            render_quality_jsonl([("rec_a", _metrics(duration_s=duration))]).splitlines()[0]
+        )
+
+        assert manifest_line["duration"] == report_line["duration_s"]
+
+    def test_non_ascii_is_unescaped_in_the_report_as_it_is_in_the_manifest(self) -> None:
+        # The one live inconsistency #54 found: the Manifest passed `ensure_ascii=False` and the
+        # report did not, so the two did not agree on how a non-ASCII string would be emitted.
+        # `id` is hash-derived today, so this is reachable only through a constructed id — which
+        # is the point: the byte format must not depend on whether a field happens to be ASCII.
+        text = render_quality_jsonl([("rec_café", _metrics())])
+
+        assert '"id":"rec_café"' in text
+        assert "\\u" not in text
 
 
 class TestSplitTable:

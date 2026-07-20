@@ -65,6 +65,13 @@ FLAGS = (FLAG_CLIPPING, FLAG_LOW_VOLUME, FLAG_DURATION_OUT_OF_RANGE)
 # one set of full-precision numbers the same way instead of rounding twice. Public because
 # :mod:`sdw.reports` renders the same metrics and must agree by construction rather than by two
 # modules happening to hold the same literals (#32).
+#
+# They govern *how many places a number is worth*, not how it is spelled, so they are equally the
+# `round` in `quality.jsonl` and the Manifest's `duration` and the f-string width in an image title
+# — each caller picks the spelling its artifact needs (#54). Moving one is a decision about the
+# metric, and it must move everywhere the metric is written or a build ships two answers for one
+# Recording. Changing a *width* for display alone would be a different edit, and does not belong
+# here.
 DBFS_DP = 2
 RATIO_DP = 4
 SECONDS_DP = 3

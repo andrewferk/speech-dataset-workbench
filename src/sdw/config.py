@@ -12,8 +12,12 @@ immutable :class:`Config`. Two facts about it are load-bearing:
 - **The config serializes exactly once**, via :meth:`Config.canonical_json`. Those bytes feed
   both the ``dataset_version`` preimage (ADR-0010) and ``dataset.json``'s ``config`` block, so
   the two cannot drift. :meth:`Config.canonical_dict` exposes the same structure for a consumer
-  that embeds it in a larger document, serialized with :data:`CANONICAL_JSON_SEPARATORS` +
+  that embeds it in a larger document, serialized with :data:`~sdw.serialization.JSON_SEPARATORS` +
   ``sort_keys`` so the embedded subtree stays byte-identical to the standalone form.
+
+The *byte format* those bytes are written in is not this module's to decide: it belongs to every
+artifact the tool emits, not just to the config, so it lives in :mod:`sdw.serialization` and is
+imported here like any other writer imports it (#54).
 
 Three sections only — ``[manifest]`` (ADR-0006), ``[quality]`` (ADR-0007), ``[split]``
 (ADR-0004). There is deliberately no ``[normalize]`` and no ``[images]`` (ADR-0005/0011): either
@@ -27,15 +31,11 @@ from pathlib import Path
 from typing import Any
 
 from sdw.errors import HardError
+from sdw.serialization import JSON_ENSURE_ASCII, JSON_SEPARATORS
 
 # Ratios must sum to 1.0; binary floats make 0.8 + 0.1 + 0.1 land a hair off, so compare with a
 # small absolute tolerance rather than for exact equality.
 RATIO_SUM_TOLERANCE = 1e-9
-
-# Canonical JSON: compact, key-sorted, UTF-8 (no \uXXXX escaping). The same settings must be used
-# wherever the config is embedded in a larger document, so the embedded subtree matches the
-# standalone bytes verbatim.
-CANONICAL_JSON_SEPARATORS = (",", ":")
 
 
 @dataclass(frozen=True)
@@ -91,8 +91,8 @@ class Config:
                 "split": vars(self.split),
             },
             sort_keys=True,
-            ensure_ascii=False,
-            separators=CANONICAL_JSON_SEPARATORS,
+            ensure_ascii=JSON_ENSURE_ASCII,
+            separators=JSON_SEPARATORS,
         )
 
     def canonical_dict(self) -> dict[str, Any]:
@@ -100,8 +100,8 @@ class Config:
 
         Derived from :meth:`canonical_json` rather than from the dataclass directly, so its keys
         iterate in the same sorted order as the canonical bytes. Serializing this dict with
-        :data:`CANONICAL_JSON_SEPARATORS` + ``sort_keys`` therefore reproduces the preimage's
-        ``config`` bytes exactly — the two records cannot drift.
+        :data:`~sdw.serialization.JSON_SEPARATORS` + ``sort_keys`` therefore reproduces the
+        preimage's ``config`` bytes exactly — the two records cannot drift.
         """
         result: dict[str, Any] = json.loads(self.canonical_json())
         return result
