@@ -159,8 +159,9 @@ class TestSensitivity:
 
 class TestToolVersion:
     def test_matches_the_declared_project_version(self) -> None:
-        # The tool is never installed (`package = false`), so there is no distribution metadata to
-        # read; `__version__` is the source and this is what stops it drifting from pyproject.
+        # `__version__` is the source `tool_version` reads, not `importlib.metadata` — which
+        # ADR-0014 made available but which reports the version recorded at install time (ADR-0010,
+        # as amended). This is what stops the two literals drifting until #37 removes one of them.
         root = Path(__file__).resolve().parents[2]
         with (root / "pyproject.toml").open("rb") as handle:
             assert tomllib.load(handle)["project"]["version"] == __version__

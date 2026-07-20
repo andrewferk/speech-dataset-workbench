@@ -121,17 +121,20 @@ class Provenance:
 def build_provenance(config: Config, dataset: Dataset) -> Provenance:
     """Compute the id and render the descriptor for a built Dataset. Pure; touches no filesystem.
 
-    The config is serialized **once** and used for both the preimage and the descriptor's ``config``
-    block, so the identity and its record cannot disagree — which is what makes the id recomputable
-    from ``--data-out`` alone. Serializing twice would be correct today and a latent divergence the
-    moment either call site grew an option.
+    The config is serialized **once** — literally once, into ``canonical`` below — and that one
+    string feeds both the preimage and the descriptor's ``config`` block, so the identity and its
+    record cannot disagree. That is what makes the id recomputable from ``--data-out`` alone.
+    Calling :meth:`~sdw.config.Config.canonical_json` on both paths would agree today, since
+    :meth:`~sdw.config.Config.canonical_dict` derives from it, but it would be two serializations
+    the docs describe as one — and a latent divergence the moment either call site grew an option.
     """
-    version = dataset_version(config, dataset.files)
+    canonical = config.canonical_json()
+    version = _version_of(canonical, dataset.files, __version__)
     document = {
         "manifest_version": MANIFEST_VERSION,
         "tool_version": __version__,
         "dataset_version": version,
-        "config": config.canonical_dict(),
+        "config": json.loads(canonical),
         "normalization": _NORMALIZATION,
         "hashing": _HASHING,
         "split": {"counts": _counts(dataset.samples)},
@@ -153,11 +156,26 @@ def dataset_version(
     ``tool_version`` is a parameter rather than a constant read inline so a test can vary it
     without patching a module global — the id's sensitivity to it is a property worth asserting
     directly.
+
+    Takes a :class:`~sdw.config.Config` and serializes it here, which is the honest signature for a
+    caller that holds a config and wants an id. :func:`build_provenance` needs the canonical string
+    itself — it embeds the same bytes in the descriptor — so it goes through :func:`_version_of`
+    instead, and serializes exactly once.
+    """
+    return _version_of(config.canonical_json(), files, tool_version)
+
+
+def _version_of(canonical_config: str, files: Mapping[str, str], tool_version: str) -> str:
+    """ADR-0010's preimage over an already-serialized config, hashed. The one recipe.
+
+    Split from :func:`dataset_version` so the serialize-once path has somewhere to hand its string,
+    and so there is still exactly one place the framing is spelled — two copies of the recipe is
+    the failure this whole module exists to prevent.
     """
     hasher = hashlib.sha256()
     hasher.update(f"{DOMAIN_SEPARATOR}\n".encode(ENCODING))
     hasher.update(f"tool_version\n{tool_version}\n".encode(ENCODING))
-    hasher.update(f"config\n{config.canonical_json()}\n".encode(ENCODING))
+    hasher.update(f"config\n{canonical_config}\n".encode(ENCODING))
     for name in SPLIT_ORDER:
         # `files` is indexed with a default of "" rather than `[]`: ADR-0004's produce-and-flag
         # case at fewer than three Sessions yields an empty Split, which must frame at length 0
