@@ -74,9 +74,16 @@ default values describe the same build and must yield the same id.
 
 ### `tool_version`
 
-`tool_version` is the **workbench's own version string** (e.g. `"0.1.0"`), read from package
-metadata. The dependency set is covered by convention rather than by the hash: `uv.lock` is
+`tool_version` is the **workbench's own version string** (e.g. `"0.1.0"`), declared as
+`sdw.__version__`. The dependency set is covered by convention rather than by the hash: `uv.lock` is
 committed (research #3), and the release rule is that **any lock change ships a version bump**.
+
+This ADR originally said "read from package metadata". That is not available: ADR-0012 sets
+`package = false` and the tool runs as `python -m sdw` off the source tree, never installed, so
+`importlib.metadata` would raise. Amended by #29: the string is declared in `src/sdw/__init__.py`
+and a test asserts it equals pyproject's `[project].version`, so the two cannot drift. If the tool
+ever becomes an installed package, reading the metadata becomes possible again and this reverts —
+without changing the preimage, which consumes a string either way.
 
 The residual — a `soxr` bump changing Normalized WAV bytes under an unchanged id — is a consequence
 of the scheme, not a defect in it. `dataset_version` identifies **the manifest and the config**; the
