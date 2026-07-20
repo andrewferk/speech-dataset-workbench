@@ -49,9 +49,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 
 from sdw import __version__
-from sdw.config import CANONICAL_JSON_SEPARATORS, Config
+from sdw.config import Config
 from sdw.manifest import ENCODING, NUM_CHANNELS, Dataset, Sample
 from sdw.normalize import RESAMPLE_QUALITY, TARGET_SAMPLE_RATE, TARGET_SUBTYPE
+from sdw.serialization import JSON_ENSURE_ASCII, JSON_SEPARATORS
 from sdw.split import SPLIT_ORDER
 
 # The domain separator, whose trailing `/1` versions *the scheme*. A future change to the preimage
@@ -202,17 +203,19 @@ def _sessions(samples: tuple[Sample, ...]) -> list[dict[str, object]]:
 def _render(document: Mapping[str, object]) -> str:
     """The descriptor as text: compact, LF-terminated, insertion-ordered at the top level.
 
+    Not routed through :func:`~sdw.serialization.render_jsonl`: the descriptor is a single object,
+    not a line-per-record file. It takes its byte format from the same constants (#54) so the
+    embedded ``config`` block stays byte-identical to the bytes the preimage hashed.
+
     ``sort_keys`` is off so the top-level keys keep ADR-0010's documented order, which is not
     alphabetical. The ``config`` subtree still comes out key-sorted because
-    :meth:`~sdw.config.Config.canonical_dict` already iterates in sorted order — which is exactly
-    what makes the block byte-identical to the bytes the preimage hashed, with the same separators
-    used on both sides.
+    :meth:`~sdw.config.Config.canonical_dict` already iterates in sorted order.
     """
     return (
         json.dumps(
             document,
-            ensure_ascii=False,
-            separators=CANONICAL_JSON_SEPARATORS,
+            ensure_ascii=JSON_ENSURE_ASCII,
+            separators=JSON_SEPARATORS,
         )
         + "\n"
     )

@@ -78,12 +78,22 @@ default values describe the same build and must yield the same id.
 `sdw.__version__`. The dependency set is covered by convention rather than by the hash: `uv.lock` is
 committed (research #3), and the release rule is that **any lock change ships a version bump**.
 
-This ADR originally said "read from package metadata". That is not available: ADR-0012 sets
-`package = false` and the tool runs as `python -m sdw` off the source tree, never installed, so
-`importlib.metadata` would raise. Amended by #29: the string is declared in `src/sdw/__init__.py`
-and a test asserts it equals pyproject's `[project].version`, so the two cannot drift. If the tool
-ever becomes an installed package, reading the metadata becomes possible again and this reverts —
-without changing the preimage, which consumes a string either way.
+This ADR originally said "read from package metadata". Amended by #29: the string is declared in
+`src/sdw/__init__.py` instead, and a test asserts it equals pyproject's `[project].version` so the
+two cannot drift.
+
+The original reason was that there was no metadata to read — ADR-0012 set `package = false` and the
+tool ran off the source tree, so `importlib.metadata` would raise. ADR-0014 has since added a build
+backend, so that reason is gone and `importlib.metadata.version("sdw")` now resolves. **The
+conclusion stands anyway, for a better reason:** `tool_version` is a hash input, and
+`importlib.metadata` reports what was written into `.dist-info` at *install* time, not what is in
+the tree now. A bumped version without a re-sync would mint ids under the stale string while the
+source said otherwise — two contributors on byte-identical source, different `dataset_version`.
+That is precisely the bookkeeping this ADR exists to avoid, and it fails silently.
+
+The duplication that remains — the same literal in `__init__.py` and in `pyproject.toml`, held
+together by a test — is #37's to remove, by having pyproject *derive* its version from the source
+(`dynamic = ["version"]`) rather than by having the source read the install.
 
 The residual — a `soxr` bump changing Normalized WAV bytes under an unchanged id — is a consequence
 of the scheme, not a defect in it. `dataset_version` identifies **the manifest and the config**; the
