@@ -54,11 +54,21 @@ PRODUCE_AND_FLAG_MARKER = "empty by arithmetic"
 
 
 @pytest.fixture(scope="module")
-def data_out(tmp_path_factory: pytest.TempPathFactory) -> Path:
-    """Build the committed `examples/data-in/` once; every named assertion reads this one tree."""
+def build(tmp_path_factory: pytest.TempPathFactory) -> tuple[int, Path]:
+    """Build the committed `examples/data-in/` once; return the exit code and the `--data-out`.
+
+    The exit code is *returned*, not asserted here, so the named `test_build_exits_zero` owns that
+    claim rather than a fixture failing before any test runs. Every other assertion reads the tree.
+    """
     out = tmp_path_factory.mktemp("example-out")
-    assert main(["build", "--data-in", str(EXAMPLE_DATA_IN), "--data-out", str(out)]) == 0
-    return out
+    code = main(["build", "--data-in", str(EXAMPLE_DATA_IN), "--data-out", str(out)])
+    return code, out
+
+
+@pytest.fixture(scope="module")
+def data_out(build: tuple[int, Path]) -> Path:
+    """The `--data-out` of the single example build (see :func:`build`)."""
+    return build[1]
 
 
 def _summary(data_out: Path) -> str:
@@ -98,10 +108,11 @@ def _low_volume_ids(data_out: Path) -> set[str]:
 class TestExampleBuild:
     """Each of ADR-0009's teaching claims, asserted by name against one build of `examples/`."""
 
-    def test_build_exits_zero(self, data_out: Path) -> None:
-        # The `data_out` fixture asserts the exit code; a green build is the precondition the rest
-        # of this class reads. Named so a total failure to build is its own line in the report.
-        assert (data_out / "dataset.json").exists()
+    def test_build_exits_zero(self, build: tuple[int, Path]) -> None:
+        # The claim the name makes: `build` returns 0. A green build is the precondition the rest of
+        # this class reads, so a total failure to build gets its own named line in the report.
+        code, _ = build
+        assert code == 0
 
     def test_no_produce_and_flag_warning(self, data_out: Path) -> None:
         # ADR-0009 chose 4 Sessions so the first run clears ADR-0004's ≥3-Session floor. If this
