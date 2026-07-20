@@ -11,7 +11,14 @@ dependencies = [
     "matplotlib",
 ]
 
-# No build backend: the tool is invoked as `python -m sdw`, never installed (ADR-0012).
+# `uv sync` installs the package (editable) into `.venv`, so nothing needs `src/` on the path
+# (ADR-0014, amending ADR-0012). `python -m sdw` keeps working alongside this.
+[project.scripts]
+sdw = "sdw.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
@@ -20,9 +27,6 @@ dev = [
     "pytest==9.0.1",
     "pytest-cov==7.0.0",
 ]
-
-[tool.uv]
-package = false
 
 [tool.ruff]
 src = ["src", "tests"]
@@ -47,5 +51,4 @@ ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["src"]
 addopts = "--cov=sdw --cov-report=term-missing"

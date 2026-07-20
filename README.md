@@ -87,26 +87,23 @@ Two commands, sharing one checking engine so they can never disagree:
 
 ```bash
 # Full build: normalize → validate → split → manifest → images → report
-python -m <package> build --data-in ./data-in --data-out ./data-out [--config config.toml]
+sdw build --data-in ./data-in --data-out ./data-out [--config config.toml]
 
 # Read-only preflight; runs build's stages 1–4, prints to stdout, writes nothing
-python -m <package> validate --data-in ./data-in [--config config.toml]
+sdw validate --data-in ./data-in [--config config.toml]
 ```
 
-Those commands run as written under [mise](https://mise.jdx.dev), which supplies both halves of
-the environment they assume: the interpreter from uv's `.venv`, and `src/` on the path. Without
-mise, supply them yourself:
+`uv sync` installs the package into `.venv`, so those commands run as written under
+[mise](https://mise.jdx.dev), which points `python` at that venv. Without mise, prefix them with
+`uv run` to select the same interpreter:
 
 ```bash
-PYTHONPATH=src uv run python -m <package> validate --data-in ./data-in
+uv run sdw validate --data-in ./data-in
 ```
 
-`uv run` selects the `.venv` interpreter; `PYTHONPATH=src` is what the src-layout costs, since
-nothing installs the package (ADR-0012) and the interpreter needs `src/` on the path to find the
-entry point. `pytest` and CI set the path themselves — via `pyproject.toml`'s
-`[tool.pytest.ini_options] pythonpath` and the CI workflow — so this applies only to running the
-CLI by hand. See [issue #48](https://github.com/andrewferk/speech-dataset-workbench/issues/48)
-for removing the requirement entirely.
+Nothing needs `PYTHONPATH` set — not `pytest`, not CI, not you (ADR-0014). `python -m sdw` is
+equivalent to `sdw` and works wherever the venv's interpreter does; both route to the same entry
+point.
 
 `validate` exits `0` **if and only if** a subsequent `build` on the same input will not hit a hard
 error. All tuning lives in an optional TOML config rather than per-parameter flags, so the CLI stays
@@ -169,8 +166,8 @@ Chosen for a transparent, inspectable, no-ML-at-runtime pipeline:
 | Resampling | `python-soxr` (`HQ`) |
 | DSP & rendering | `numpy`, `scipy.signal`, `matplotlib` (Agg) |
 
-No FFmpeg, no PyAV, no torch, no librosa. Layout is `src/`, with a single `pyproject.toml` and no
-build backend — v0.1 runs as `python -m <package>`.
+No FFmpeg, no PyAV, no torch, no librosa. Layout is `src/`, with a single `pyproject.toml` and a
+`hatchling` build backend — `uv sync` installs the package, and v0.1 runs as `sdw`.
 
 ## Decision record
 
@@ -188,6 +185,8 @@ build backend — v0.1 runs as `python -m <package>`.
 | [0010](docs/adr/0010-dataset-version-and-provenance.md) | Dataset version & provenance |
 | [0011](docs/adr/0011-visualization-output.md) | Visualization output |
 | [0012](docs/adr/0012-v0-1-acceptance-criteria.md) | v0.1 acceptance criteria |
+| [0013](docs/adr/0013-recordings-csv-ingest-and-duplicate-resolution.md) | `recordings.csv` ingest & duplicate resolution |
+| [0014](docs/adr/0014-build-backend-and-installed-entry-point.md) | Build backend & installed entry point |
 
 Background research (library and convention surveys) lives on the local `research/*` branches.
 
