@@ -79,9 +79,12 @@ class TestSentinel:
     """`dataset.json` is written last, so its presence means the build finished (ADR-0003)."""
 
     def test_dataset_json_is_the_newest_file_in_the_tree(self, tmp_path: Path) -> None:
-        # "Written last" is structural in `commit.commit` — the sentinel lands after every staged
-        # artifact, and the swap is a rename that preserves mtimes. So on a completed build the
-        # sentinel is the newest file in `--data-out`: an observable stand-in for the write order.
+        # "Written last" is enforced structurally in `commit.commit` and proven directly by
+        # `test_commit.py::test_the_sentinel_is_written_by_commit_and_not_before`. This is the
+        # *observable* half at e2e altitude: the sentinel lands after every staged artifact and the
+        # swap is a rename that preserves mtimes, so on a completed build `dataset.json` is the
+        # newest file in `--data-out`. A coarse-resolution filesystem could tie the mtimes, which is
+        # why the assertion is "is the newest" (ties allowed), never a false failure.
         data_in = tmp_path / "in"
         data_out = tmp_path / "out"
         assert _build_reference(data_in, data_out) == 0

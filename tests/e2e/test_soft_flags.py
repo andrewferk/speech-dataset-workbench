@@ -64,12 +64,13 @@ def _manifest_ids(data_out: Path) -> set[str]:
     return ids
 
 
-def _quality_rows(data_out: Path) -> dict[str, list[str]]:
-    rows = {}
+def _quality_flags_by_id(data_out: Path) -> dict[str, list[str]]:
+    # One `quality.jsonl` line per Recording (ADR-0007), keyed by Sample id → its flags.
+    flags_by_id = {}
     for line in (data_out / "reports" / "quality.jsonl").read_text(encoding="utf-8").splitlines():
         record = json.loads(line)
-        rows[record["id"]] = record["flags"]
-    return rows
+        flags_by_id[record["id"]] = record["flags"]
+    return flags_by_id
 
 
 class TestSoftFlagPassThrough:
@@ -78,7 +79,7 @@ class TestSoftFlagPassThrough:
         data_out = tmp_path / "out"
         assert main(["build", "--data-in", str(data_in), "--data-out", str(data_out)]) == 0
 
-        quality = _quality_rows(data_out)
+        quality = _quality_flags_by_id(data_out)
         flagged = {rec_id for rec_id, flags in quality.items() if "duration_out_of_range" in flags}
         assert len(flagged) == 1
 
