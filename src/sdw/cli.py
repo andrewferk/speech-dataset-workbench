@@ -1,4 +1,4 @@
-"""Argument parsing for `python -m sdw`.
+"""Argument parsing for the `sdw` command.
 
 Two commands, and the mapping from an outcome to an exit code:
 

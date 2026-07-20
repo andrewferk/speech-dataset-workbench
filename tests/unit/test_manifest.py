@@ -1,4 +1,4 @@
-"""The Manifest rows and the HF view: key order, field values, and the two views' parity (#28).
+"""The Manifest lines and the HF view: key order, field values, and the two views' parity (#28).
 
 This is the deliverable, so these tests are what stands between a consumer and a dataset that
 needs glue. They pin the four things a consumer's loader actually depends on: the fixed key order,
@@ -94,89 +94,89 @@ def _lines(text: str) -> list[dict[str, Any]]:
 
 
 def _all_lines(dataset: Dataset) -> list[dict[str, Any]]:
-    return [row for name in SPLIT_ORDER for row in _lines(dataset.files[f"{name}.jsonl"])]
+    return [line for name in SPLIT_ORDER for line in _lines(dataset.files[f"{name}.jsonl"])]
 
 
-class TestCanonicalRow:
+class TestCanonicalLine:
     """The per-Sample line NeMo reads with zero transformation."""
 
     def test_keys_are_the_adr_s_order_exactly(self) -> None:
         dataset = _build(_recordings({"sess_01": 3, "sess_02": 3, "sess_03": 3}))
 
-        for row in _all_lines(dataset):
-            assert list(row) == CANONICAL_KEYS
+        for line in _all_lines(dataset):
+            assert list(line) == CANONICAL_KEYS
 
     def test_fields_carry_the_recording_s_values(self) -> None:
         recordings = [_recording("sess_01", 0)]
         recording = recordings[0]
 
         dataset = _build(recordings, {recording.recording_id: 2.0})
-        (row,) = _all_lines(dataset)
+        (line,) = _all_lines(dataset)
 
-        assert row["id"] == recording.recording_id
-        assert row["text"] == recording.prompt_text
-        assert row["prompt_id"] == recording.prompt_id
-        assert row["speaker_id"] == recording.speaker_id
-        assert row["session_id"] == recording.session_id
-        assert row["device"] == recording.device
-        assert row["environment"] == recording.environment
-        assert row["content_hash"] == recording.content_hash
+        assert line["id"] == recording.recording_id
+        assert line["text"] == recording.prompt_text
+        assert line["prompt_id"] == recording.prompt_id
+        assert line["speaker_id"] == recording.speaker_id
+        assert line["session_id"] == recording.session_id
+        assert line["device"] == recording.device
+        assert line["environment"] == recording.environment
+        assert line["content_hash"] == recording.content_hash
 
-    def test_the_normalization_target_is_stamped_on_every_row(self) -> None:
+    def test_the_normalization_target_is_stamped_on_every_line(self) -> None:
         dataset = _build(_three_sessions())
 
-        for row in _all_lines(dataset):
-            assert row["sample_rate"] == 16000
-            assert row["num_channels"] == 1
+        for line in _all_lines(dataset):
+            assert line["sample_rate"] == 16000
+            assert line["num_channels"] == 1
 
     def test_perceived_text_is_always_null(self) -> None:
         dataset = _build(_three_sessions())
 
-        for row in _all_lines(dataset):
-            assert row["perceived_text"] is None
+        for line in _all_lines(dataset):
+            assert line["perceived_text"] is None
 
     def test_text_is_verbatim_and_not_normalized_like_prompt_id(self) -> None:
         """`prompt_id`'s NFC/trim/collapse defines Prompt sameness, never the transcript."""
         recordings = [_recording("sess_01", 0, prompt_text="  Hello,   THERE.  ")]
 
         dataset = _build(recordings)
-        (row,) = _all_lines(dataset)
+        (line,) = _all_lines(dataset)
 
-        assert row["text"] == "  Hello,   THERE.  "
+        assert line["text"] == "  Hello,   THERE.  "
 
     def test_duration_is_rounded_to_milliseconds(self) -> None:
         recordings = [_recording("sess_01", 0)]
 
         dataset = _build(recordings, {recordings[0].recording_id: 1.23456789})
-        (row,) = _all_lines(dataset)
+        (line,) = _all_lines(dataset)
 
-        assert row["duration"] == 1.235
+        assert line["duration"] == 1.235
 
     def test_split_is_present_as_provenance(self) -> None:
         dataset = _build(_three_sessions())
 
         for name in SPLIT_ORDER:
-            for row in _lines(dataset.files[f"{name}.jsonl"]):
-                assert row["split"] == name
+            for line in _lines(dataset.files[f"{name}.jsonl"]):
+                assert line["split"] == name
 
     def test_lang_carries_the_configured_code(self) -> None:
         dataset = _build(_recordings({"sess_01": 1, "sess_02": 1, "sess_03": 1}), lang="en")
 
-        for row in _all_lines(dataset):
-            assert row["lang"] == "en"
+        for line in _all_lines(dataset):
+            assert line["lang"] == "en"
 
     def test_lang_is_null_when_unconfigured(self) -> None:
         dataset = _build(_recordings({"sess_01": 1, "sess_02": 1, "sess_03": 1}))
 
-        for row in _all_lines(dataset):
-            assert row["lang"] is None
+        for line in _all_lines(dataset):
+            assert line["lang"] is None
 
     def test_no_quality_field_reaches_the_manifest(self) -> None:
         """The consumer's dataset is not entangled with the operator's diagnostics (#28)."""
         dataset = _build(_three_sessions())
 
-        for row in _all_lines(dataset):
-            assert not [key for key in row if "flag" in key or "clip" in key or "rms" in key]
+        for line in _all_lines(dataset):
+            assert not [key for key in line if "flag" in key or "clip" in key or "rms" in key]
 
 
 class TestAudioPath:
@@ -186,11 +186,11 @@ class TestAudioPath:
         dataset = _build(_three_sessions())
 
         for name in SPLIT_ORDER:
-            for row in _lines(dataset.files[f"{name}.jsonl"]):
-                assert row["audio_filepath"] == f"audio/{name}/{row['id']}.wav"
+            for line in _lines(dataset.files[f"{name}.jsonl"]):
+                assert line["audio_filepath"] == f"audio/{name}/{line['id']}.wav"
 
-    def test_the_helper_and_the_row_agree(self) -> None:
-        """The stage that writes the WAV uses `audio_path`; the row must point at the same file."""
+    def test_the_helper_and_the_line_agree(self) -> None:
+        """The stage that writes the WAV uses `audio_path`; the line must point at the same file."""
         dataset = _build(_three_sessions())
 
         for sample in dataset.samples:
@@ -198,34 +198,34 @@ class TestAudioPath:
 
 
 class TestHuggingFaceView:
-    """`audio/<split>/metadata.jsonl` — the canonical row, two mechanical transforms."""
+    """`audio/<split>/metadata.jsonl` — the canonical line, two mechanical transforms."""
 
     def test_path_becomes_a_bare_file_name_in_place(self) -> None:
         dataset = _build(_three_sessions())
 
-        rows = _lines(dataset.files["audio/train/metadata.jsonl"])
-        assert [list(row)[:2] for row in rows] == [["id", "file_name"]] * len(rows)
-        for row in rows:
-            assert row["file_name"] == f"{row['id']}.wav"
+        lines = _lines(dataset.files["audio/train/metadata.jsonl"])
+        assert [list(line)[:2] for line in lines] == [["id", "file_name"]] * len(lines)
+        for line in lines:
+            assert line["file_name"] == f"{line['id']}.wav"
 
     def test_split_is_dropped_because_the_folder_is_the_split(self) -> None:
         dataset = _build(_three_sessions())
 
-        for row in _lines(dataset.files["audio/train/metadata.jsonl"]):
-            assert "split" not in row
-            assert "audio_filepath" not in row
+        for line in _lines(dataset.files["audio/train/metadata.jsonl"]):
+            assert "split" not in line
+            assert "audio_filepath" not in line
 
-    def test_every_other_field_is_at_parity_with_the_canonical_row(self) -> None:
+    def test_every_other_field_is_at_parity_with_the_canonical_line(self) -> None:
         dataset = _build(_three_sessions(), lang="en")
 
         for name in SPLIT_ORDER:
             canonical = _lines(dataset.files[f"{name}.jsonl"])
             hf = _lines(dataset.files[f"audio/{name}/metadata.jsonl"])
             assert len(hf) == len(canonical)
-            for canonical_row, hf_row in zip(canonical, hf, strict=True):
+            for canonical_line, hf_line in zip(canonical, hf, strict=True):
                 dropped = ("audio_filepath", "split")
-                shared = {k: v for k, v in canonical_row.items() if k not in dropped}
-                assert {k: v for k, v in hf_row.items() if k != "file_name"} == shared
+                shared = {k: v for k, v in canonical_line.items() if k not in dropped}
+                assert {k: v for k, v in hf_line.items() if k != "file_name"} == shared
 
     def test_val_is_not_renamed(self) -> None:
         """HF reads `val` as a validation split already, so ADR-0003's folder name stands."""
@@ -273,11 +273,11 @@ class TestDeterminism:
 
         assert first.files == second.files
 
-    def test_rows_are_in_a_total_order_within_each_split(self) -> None:
+    def test_lines_are_in_a_total_order_within_each_split(self) -> None:
         dataset = _build(_recordings({"sess_01": 3, "sess_02": 3, "sess_03": 3}))
 
         for name in SPLIT_ORDER:
-            ids = [row["id"] for row in _lines(dataset.files[f"{name}.jsonl"])]
+            ids = [line["id"] for line in _lines(dataset.files[f"{name}.jsonl"])]
             assert ids == sorted(ids)
 
     def test_lines_are_lf_terminated_with_no_trailing_whitespace(self) -> None:
