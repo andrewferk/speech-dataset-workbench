@@ -72,7 +72,7 @@ _SECONDS_DP = 3
 class QualityMetrics:
     """One Recording's measurements plus the flags they tripped.
 
-    The seven metrics are always reported, flags or not — a clean Recording is as much a row of the
+    The seven metrics are always reported, flags or not — a clean Recording is as much a line of the
     quality report as a flagged one. `flags` is ordered by :data:`FLAGS` and is empty when clean.
     """
 
