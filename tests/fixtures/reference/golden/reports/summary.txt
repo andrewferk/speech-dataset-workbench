@@ -1,0 +1,15 @@
+Quality: 4 recordings — 4 clean, 0 flagged
+  clipping              0
+  low_volume            0
+  duration_out_of_range 0
+
+split     target  realized
+train  3.2 (80%)   2 (50%)
+val    0.4 (10%)   1 (25%)
+test   0.4 (10%)   1 (25%)
+
+non-emptiness repair: moved session sess_a1 from train to test
+  (≥3 Sessions → val & test must be non-empty; ratios are best-effort)
+
+Speaker spk_a appears in train and test — test set is not speaker-independent
+Speaker spk_b appears in train and val — val set is not speaker-independent
