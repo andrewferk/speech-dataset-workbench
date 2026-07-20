@@ -8,7 +8,7 @@ within-arch determinism), ADR-0007 (quality metrics — whose computed values th
 ADR-0008 (which handed down "the image stage must emit deterministic PNGs" as a hard constraint),
 ADR-0010 (`dataset_version` preimage — which decides the config question), issue #8 (pipeline stages &
 failure policy) and research #4 (library stack). It does not reopen image naming (ADR-0003) or the
-manifest row (ADR-0006).
+manifest line (ADR-0006).
 
 ## Decisions
 

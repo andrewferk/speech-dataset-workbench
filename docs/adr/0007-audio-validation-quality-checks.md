@@ -101,7 +101,7 @@ decode failure" is not a flag here — it is ADR-0005/#11's hard abort.
 
 ### Where results are recorded
 
-- **`reports/quality.jsonl`** (written by `build`) — **one row per kept Recording** (clean rows
+- **`reports/quality.jsonl`** (written by `build`) — **one line per kept Recording** (clean lines
   included). Fixed key order, sorted by `id`, deterministic (no timestamps/host), rounding: dBFS
   2 dp / ratios 4 dp / seconds 3 dp. `flags` is an array of tripped flag names; `[]` = clean.
 

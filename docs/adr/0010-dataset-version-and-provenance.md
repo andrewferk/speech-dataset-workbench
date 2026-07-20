@@ -33,7 +33,7 @@ test.jsonl <byte-length>\n<raw bytes of test.jsonl>
 - **Each split file is framed** with its name and exact byte length before its raw bytes. Framing is
   structural, not decorative: plain concatenation is ambiguous, since `train=[a,b], val=[c]` and
   `train=[a], val=[b,c]` produce identical bytes despite being different split assignments. The
-  per-row `split` field happens to disambiguate them today, but that is a coincidence of ADR-0006's
+  per-line `split` field happens to disambiguate them today, but that is a coincidence of ADR-0006's
   schema, and the hash must not depend on it. An empty `val`/`test` — ADR-0004's produce-and-flag
   case at fewer than 3 sessions — frames cleanly as length `0`.
 - Files are framed in the fixed order `train`, `val`, `test`. Raw bytes are used exactly as written
@@ -41,7 +41,7 @@ test.jsonl <byte-length>\n<raw bytes of test.jsonl>
 
 ### What the preimage covers, and why
 
-**The manifest is hashed as emitted, rather than as a hand-listed set of fields.** The rows already
+**The manifest is hashed as emitted, rather than as a hand-listed set of fields.** The lines already
 carry `content_hash`, `text`, `prompt_id`, `speaker_id`, `session_id`, `device`, `environment`,
 `lang`, and `split`, so hashing them covers every one — and keeps covering fields added later
 without a list to maintain in parallel.
@@ -50,10 +50,10 @@ This closes a hole in ADR-0001's formulation, which predates the `recordings.csv
 #8): hashing only the sorted Sample `content_hash`es covers the *Original audio bytes* and nothing
 else. Fixing a typo in a `prompt_text`, relabelling a `session_id`, or correcting a `speaker_id`
 leaves every audio file untouched — identical content-hashes, identical id, **different manifest**.
-Two materially different datasets would claim the same version. Hashing the emitted rows makes that
+Two materially different datasets would claim the same version. Hashing the emitted lines makes that
 unrepresentable.
 
-**The effective config is hashed alongside** because not every output-affecting input reaches a row.
+**The effective config is hashed alongside** because not every output-affecting input reaches a manifest line.
 ADR-0007's four `[quality]` thresholds change `reports/quality.jsonl` but appear in no manifest
 field; without config in the preimage, a threshold change would silently reuse the id — the same
 hole one door down. It is serialized as canonical JSON: keys sorted, UTF-8, and **all defaults
@@ -62,8 +62,8 @@ default values describe the same build and must yield the same id.
 
 **Deliberately excluded:**
 
-- **`dataset.json`** — it contains `dataset_version`, so hashing it is circular. No manifest row
-  contains the id, so the rows are safe.
+- **`dataset.json`** — it contains `dataset_version`, so hashing it is circular. No manifest line
+  contains the id, so the lines are safe.
 - **The Normalized WAVs, `reports/quality.jsonl`, and `reports/summary.txt`** — all derive from
   resampled audio floats, which ADR-0005 establishes are **not** cross-arch bit-exact (soxr FFT
   ULPs). Hashing them would make `dataset_version` vary by machine and break the exact-`dataset_version`
@@ -163,7 +163,7 @@ prior builds is a v0.2 concern.
 - **An explicitly enumerated field list** (content-hashes + prompt_ids + speaker/session + device/
   environment + split + config + tool_version) — identical coverage today, but the list must be kept
   in sync with the manifest by hand forever. Add a field, forget the list, and the id silently stops
-  covering it. Hashing the emitted rows cannot drift from the rows.
+  covering it. Hashing the emitted lines cannot drift from the lines.
 - **Hashing `uv.lock`** — mechanically forces a new id on any dependency change, no discipline
   needed. Rejected: it churns every dataset id on bumps that cannot affect output (`ruff`, `pytest`),
   and it requires a source checkout, so an installed wheel could not compute an id at all.

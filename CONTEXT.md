@@ -60,10 +60,11 @@ _Avoid_: Transcript, actual text, hypothesis.
 ### Dataset
 
 **Sample**:
-One row of a dataset/manifest: a single Normalized audio file plus its metadata and split
+One line of a Manifest: a single Normalized audio file plus its metadata and split
 assignment, ready for a consumer (HF / NeMo). A Sample points at a Recording's Normalized audio.
 In v0.1 kept Recordings map 1:1 to Samples.
-_Avoid_: Row, example, item, recording (distinct — see above).
+_Avoid_: Row (that is `recordings.csv`'s vocabulary — the input has rows, the Manifest has lines),
+example, item, recording (distinct — see above).
 _See_: ADR-0006 (manifest format — the exact per-Sample fields).
 
 **Manifest**:
@@ -117,7 +118,7 @@ _Avoid_: Error, warning, rejection, defect.
 _See_: ADR-0007 (audio validation & quality checks).
 
 **Quality report**:
-The emitted record of the quality checks: `reports/quality.jsonl` (one row per kept Recording, all
+The emitted record of the quality checks: `reports/quality.jsonl` (one line per kept Recording, all
 metrics + its `flags` array) and the human quality digest in `reports/summary.txt` (a per-flag tally
 plus one line per flagged Recording). The `validate` command prints the same digest to stdout without
 writing anything. The Manifest itself carries no quality fields.

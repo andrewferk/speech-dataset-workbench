@@ -35,7 +35,7 @@ storage consequences concrete.
     <recording_id>.waveform.png
     <recording_id>.spectrogram.png
   reports/
-    quality.jsonl                       # one row per Recording, keyed by recording_id
+    quality.jsonl                       # one line per Recording, keyed by recording_id
     summary.txt                         # human-readable build summary
 ```
 
@@ -59,7 +59,7 @@ storage consequences concrete.
   filenames; full digest for integrity and version identity (a git-style short-id/full-hash split).
 - **Images and reports share the `recording_id` stem**, so every artifact for a Recording is one
   `ls audio/*/<id>* images/<id>* ` / manifest lookup away. `recording_id` is the single stem across
-  audio → images → quality rows. Which images and their params are a separate visualization
+  audio → images → quality lines. Which images and their params are a separate visualization
   decision.
 
 ### `--data-in` input contract

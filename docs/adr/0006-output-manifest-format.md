@@ -23,6 +23,10 @@ ADR-0003 explicitly deferred to issue #12.
   the single atomic `build` (issue #8, ADR-0003). HF Hub publishing (dataset card, `configs` YAML,
   `push_to_hub`) is v0.2.
 
+> **Amended by #28**: the empty-Split case was unstated — the canonical manifests are emitted
+> unconditionally, the HF views only where there is audio. See *Sample order and the empty-Split
+> case* below.
+
 ### Canonical Sample line (`train/val/test.jsonl`)
 
 A superset of NeMo's required keys, emitted in this fixed key order:
@@ -43,7 +47,7 @@ A superset of NeMo's required keys, emitted in this fixed key order:
 | `num_channels`   | `1` (the on-disk Normalized WAV)                                             |
 | `content_hash`   | `sha256:` + full 64 hex of the **Original file bytes**                       |
 | `lang`           | configured ISO 639-1 code, or `null` (see config)                           |
-| `split`          | `"train"`/`"val"`/`"test"` — provenance only; no consumer reads split from the row |
+| `split`          | `"train"`/`"val"`/`"test"` — provenance only; no consumer reads split from the line |
 
 - **`text` is always verbatim**; `prompt_id`'s normalization only defines when two Prompts are
   *the same*, and does not case-fold or strip punctuation, so `"Hello."` and `"hello"` stay distinct.
@@ -51,7 +55,7 @@ A superset of NeMo's required keys, emitted in this fixed key order:
   The `sha256:` prefix makes the algorithm self-describing and a future algorithm change unambiguous.
 - The manifest describes the **Normalized** audio (the file on disk in `audio/`); the Original is
   referenced only through `content_hash`/`recording_id` and lives untouched in `--data-in`. The
-  Original's native rate/channels are recoverable from it and are **not** duplicated into the row.
+  Original's native rate/channels are recoverable from it and are **not** duplicated into the line.
 - `offset` (a NeMo optional) is **omitted**: one Recording is one utterance per file, so it is
   always `0.0`, which NeMo assumes for a missing key.
 
@@ -105,7 +109,7 @@ recognizes `val` as a validation-split keyword, so `audio/val/` needs no rename 
 ### Config
 
 - This ADR owns the **`[manifest]`** config section. Its only v0.1 key is **`lang`** — an optional
-  ISO 639-1 code (default unset → emitted as `null` in every row, and under `config.manifest.lang`
+  ISO 639-1 code (default unset → emitted as `null` in every line, and under `config.manifest.lang`
   in `dataset.json`; ADR-0010 removed the top-level `lang` field).
 
 ### Determinism
@@ -118,6 +122,25 @@ Per issue #8, the same input + config + tool version must yield byte-identical a
 - Sample lines ordered deterministically; `sessions` sorted by `session_id`.
 - **No timestamps, wall-clock, host, or path-outside-the-tree facts** anywhere in the durable output.
 
+> **Amended by #28**: "ordered deterministically" left the key unnamed — it is now `recording_id`,
+> ascending. See *Sample order and the empty-Split case* below.
+
+### Amended by #28 — Sample order and the empty-Split case
+
+The decisions above required Sample lines to be "ordered deterministically" without naming a key,
+and were silent on what a build emits for a Split with no Samples. Both are pinned here:
+
+- **Sample lines are ordered by `recording_id`, ascending.** A total order over a content-derived
+  id, so reordering the rows of `recordings.csv` — which changes nothing about the Dataset —
+  cannot change a byte of any manifest, and so cannot mint a new `dataset_version` (ADR-0010).
+  Session- or speaker-grouped order was available and is rejected: it would make the emitted bytes
+  depend on a grouping the consumer does not read.
+- **All three `<split>.jsonl` are always emitted; `audio/<split>/metadata.jsonl` only where there
+  is audio.** A consumer opening `test.jsonl` on a Dataset too small to fill test should read zero
+  Samples, not crash on a missing file. The HF view is asymmetric with it deliberately: no
+  `audio/<split>/` directory exists for an empty Split, so a `metadata.jsonl` there would describe
+  a folder that is not present.
+
 ## Considered and rejected
 
 - **A single manifest serving both consumers** — impossible: NeMo needs `audio_filepath`
@@ -128,7 +151,7 @@ Per issue #8, the same input + config + tool version must yield byte-identical a
   zero-code and is consistent with issue #8.
 - **`device_id` / `environment_id`** — implies an id scheme that does not exist (ADR-0001 ids only
   prompt/recording/speaker/session); the `_id` suffix stays reserved for real id handles.
-- **Reserving `perceived_text` in docs only** — emitting `perceived_text: null` per row makes the
+- **Reserving `perceived_text` in docs only** — emitting `perceived_text: null` per line makes the
   dual-annotation schema literal, so v0.2 populates it in place with no schema change.
 - **Bare-hex `content_hash`** — matches `sha256sum` output but leaves the algorithm implicit; the
   `sha256:` prefix is cheap self-description.
@@ -136,7 +159,7 @@ Per issue #8, the same input + config + tool version must yield byte-identical a
   the operator meant as distinct (capitalization/punctuation drills); light normalization only.
 - **`source_sample_rate`/`source_num_channels` provenance fields** — the Original is retained in
   `--data-in` and identified by `content_hash`, so its native format is recoverable; not duplicated.
-- **Keeping `offset`, or a per-row split HF reads** — always-constant noise; dropped.
+- **Keeping `offset`, or a per-line split HF reads** — always-constant noise; dropped.
 - **Emitting a `README.md` dataset card + `configs` YAML** — real surface that reads as a v0.2
   publish feature; the local `audiofolder` path already works turnkey without it.
 ```

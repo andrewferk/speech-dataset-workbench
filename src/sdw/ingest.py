@@ -22,7 +22,7 @@ Three facts pin the shape:
 
 - **Byte-identical Originals with conflicting metadata abort.** Two rows whose Originals hash the
   same collapse to one ``recording_id`` and one audio path; if they disagree on any manifest-bearing
-  field they would imply two conflicting Manifest rows, so the run aborts rather than silently pick
+  field they would imply two conflicting Manifest lines, so the run aborts rather than silently pick
   one (ADR-0013). Byte-identical rows that *agree* collapse to one Recording, as ADR-0001 requires.
 """
 
@@ -173,7 +173,7 @@ def _collapse(recordings: list[Recording]) -> list[Recording]:
 
     Rows are grouped by ``content_hash`` (the full hash, not the truncated ``recording_id``). Within
     a group every manifest-bearing field must agree: agreement means one true Recording seen twice
-    (ADR-0001), disagreement means two conflicting Manifest rows hiding behind one audio path
+    (ADR-0001), disagreement means two conflicting Manifest lines hiding behind one audio path
     (ADR-0013) — ambiguous input, so abort. First-occurrence order is preserved.
     """
     by_hash: dict[str, Recording] = {}
