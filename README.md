@@ -132,6 +132,45 @@ The manifest is a superset of NeMo's required keys (`audio_filepath`, `duration`
 a valid NeMo manifest with zero transformation, while HF `audiofolder` reads the same data from the
 split-bucketed `audio/` tree.
 
+## Auditing a build — recomputing `dataset_version`
+
+`dataset_version` is a `sha256` you can recompute from a `--data-out` tree **alone**, without the
+`--data-in` that produced it (ADR-0010). There is no `verify` command — the two-command spine
+(`build`, `validate`) stands — because the recipe below is all it would be. Follow it by hand, or in
+~15 lines of any language, to confirm a distributed Dataset's id matches its bytes:
+
+1. **Read `dataset.json`.** Take the `tool_version` string and the entire `config` object.
+2. **Re-serialize `config` canonically:** keys sorted, no whitespace between tokens
+   (`,`/`:` separators), UTF-8, non-ASCII left as-is. These are the exact bytes `dataset.json`
+   already stores for that block, so a canonical dump of the parsed object reproduces them.
+3. **Build the preimage** — a byte string, in exactly this order, with `\n` as shown:
+
+   ```
+   sdw-dataset-version/1\n
+   tool_version\n<tool_version>\n
+   config\n<canonical config JSON>\n
+   train.jsonl <byte-length>\n<raw bytes of train.jsonl>
+   val.jsonl <byte-length>\n<raw bytes of val.jsonl>
+   test.jsonl <byte-length>\n<raw bytes of test.jsonl>
+   ```
+
+   `sdw-dataset-version/1` is a domain separator whose `/1` versions the scheme. Each split file is
+   framed by its **name and exact byte length** before its **raw bytes read from disk** (never
+   re-serialized), in the fixed order `train`, `val`, `test`. An empty `val`/`test` frames cleanly
+   at length `0`.
+4. **`sha256` the preimage**, hex-encode it, and prefix `sha256:`. That string must equal
+   `dataset_version` in `dataset.json`.
+
+A mismatch means the tree's bytes and its recorded id disagree — either the Dataset was tampered
+with, or this recipe and the tool have drifted. `dataset.json`'s `hashing.dataset_version` field
+carries a one-line summary of the same recipe, so the artifact explains its own id standalone.
+
+> This recipe is checked in CI by `tests/e2e/test_audit_recipe.py`, which reimplements it
+> **independently — importing nothing from `src/`** — and runs it against the committed reference
+> build. A test sharing the tool's own hashing code would compute `f(x) == f(x)` and pass even when
+> both the code and this prose are wrong; the two are kept honest only by being written twice and
+> edited together (ADR-0012 Check 3).
+
 ## The claims the design makes
 
 - **Deterministic.** The same `--data-in` + config + tool version yields the same `dataset_version`
