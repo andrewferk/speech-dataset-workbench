@@ -8,6 +8,21 @@ on:
 # Single-OS on the pinned Python floor; the cross-arch normalization caveat of ADR-0005 is
 # documented, not CI-enforced (ADR-0008).
 jobs:
+  # CI provisions Python through setup-uv, so nothing else here exercises mise.toml. Without
+  # this job a syntax error in it reaches main with CI green, breaking every contributor's
+  # shell while the test suite still passes. `mise ls` exits non-zero on a parse error.
+  mise-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: jdx/mise-action@v2
+        with:
+          install: false
+      - name: mise.toml parses
+        run: |
+          mise trust "$GITHUB_WORKSPACE/mise.toml"
+          mise ls
+
   check:
     runs-on: ubuntu-latest
     steps:
