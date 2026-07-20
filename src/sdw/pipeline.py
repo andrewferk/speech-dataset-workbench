@@ -1,23 +1,21 @@
 """The two commands' internals.
 
-Still partly stubs: they hold the shape (a pure function of `--data-in` plus config) and the
-hard-error contract. Six real stages have landed — ingest, which reads `recordings.csv`, resolves
-the Originals, and derives their identity (#24); normalization, which decodes each Original and
-converts it to mono 16 kHz in memory (#25); quality, which measures each Recording and derives its
-advisory flags (#26); splitting, which assigns every Session to exactly one Split (#27); images,
-which renders two PNGs per Recording (#31); and reporting, which writes `reports/quality.jsonl` and
-`reports/summary.txt` (#32). The first three complete `validate`, which prints the quality digest
-and still writes nothing, anywhere. The last three are `build`-only — images are why `build` stages
-and commits a tree at all, and reporting is what makes that tree explicable on its own. The
-remaining stages — the manifest and `dataset.json` — are later tickets, and both are on the `build`
-side too.
+Every real stage has now landed. `validate` reads `recordings.csv` and resolves the Originals
+(ingest, #24), decodes each and converts it to mono 16 kHz (normalize, #25), and measures each
+Recording for its advisory flags (quality, #26) — then prints the digest and writes nothing,
+anywhere (ADR-0002). `build` runs those same three and then the four that produce a durable tree:
+splitting, which assigns every Session to exactly one Split (#27); images, two PNGs per Recording
+(#31); reporting, `reports/quality.jsonl` and `reports/summary.txt` (#32); and the Manifest plus
+`dataset.json` (#28/#29). It stages the whole tree into a sibling `.tmp` and hands it to `commit`,
+the one writer, which writes `dataset.json` last as the completeness sentinel and swaps the tree
+into `--data-out` by rename (#30, ADR-0003). A hard error anywhere leaves the last good Dataset
+untouched and no build ever visible half-finished.
 """
 
-import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
-from sdw import images, ingest, normalize, quality, reports, split
+from sdw import commit, images, ingest, manifest, normalize, provenance, quality, reports, split
 from sdw.config import Config, load_config
 from sdw.errors import HardError
 from sdw.ingest import Recording
@@ -85,51 +83,73 @@ def analyze(
 
 
 def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
-    """Transform `data_in` into `data_out` as one atomic commit (ADR-0003).
+    """Transform `data_in` into `data_out` as one atomic commit (#30, ADR-0003).
 
-    The tree is staged into a sibling `<data-out>.tmp` and committed by rename, so a hard error
-    anywhere leaves no durable output and no build is ever visible half-finished. The staging tree
-    currently holds `images/` and `reports/`; the remaining stages — the manifest and
-    `dataset.json` — fill it in, and #30 takes ownership of the commit itself, including
-    `dataset.json` as the completeness sentinel.
+    The whole tree is staged into a sibling `<data-out>.tmp` — `commit.prepare` first clears any
+    `.tmp`/`.old` a crashed run left behind — and nothing touches `--data-out` until the swap. On a
+    hard error anywhere, `commit.discard` drops the staging and the last good Dataset is preserved
+    byte for byte; the exit code is the CLI's. On success `commit.commit` writes `dataset.json`
+    last, as the completeness sentinel, and renames the staged tree into place.
     """
     resolved, recordings = _preflight(data_in, config)
-    staging = data_out.with_name(data_out.name + ".tmp")
-    shutil.rmtree(staging, ignore_errors=True)
+    staging = commit.prepare(data_out)
     try:
-        # The metrics are retained across the loop — they are the lines of `reports/quality.jsonl`
-        # (#32) — while the audio is not, since only the renderer needs it and only while it is in
-        # hand. One decode feeds both.
+        # One decode feeds three consumers while the audio is in hand: the renderer (#31), the WAV
+        # written into the staged tree, and the quality tap. The audio is never retained past its
+        # iteration — a Dataset's worth of float64 does not fit in memory — so the Normalized WAV
+        # is written now, to a flat path under `audio/`, and moved into its Split bucket below once
+        # the assignment is known. The metrics *are* retained: they are the report lines (#32) and
+        # each Recording's Manifest `duration`.
         measured: list[tuple[str, QualityMetrics]] = []
+        durations: dict[str, float] = {}
+        staged_audio: dict[str, Path] = {}
         for recording, audio, metrics in _measured(data_in, recordings, resolved):
             images.render(audio, metrics, recording, staging / "images")
+            wav = staging / manifest.AUDIO_DIR / f"{recording.recording_id}.wav"
+            wav.parent.mkdir(parents=True, exist_ok=True)
+            normalize.write_normalized(audio, wav)
+            staged_audio[recording.recording_id] = wav
+            durations[recording.recording_id] = metrics.duration_s
             measured.append((recording.recording_id, metrics))
         # The splitter runs after normalize + validate on the fixed surviving set (ADR-0004), so
         # its position here is the contract, not a detail: a hard error must abort *before* any
         # Session is placed. That is why it follows the loop above rather than sharing it — the
-        # loop is where every decode gate fires (#27). The manifest (#12) consumes the assignments;
+        # loop is where every decode gate fires (#27). The Manifest (#28) consumes the assignments;
         # the reports render the disclosures it carries.
         split_result = split.split_sessions(recordings, resolved.split)
         reports.write_reports(staging / reports.REPORTS_DIR, measured, split_result)
+        _place_audio(staging, staged_audio, recordings, split_result)
+        dataset = manifest.build_dataset(recordings, split_result, durations, resolved)
+        commit.write_files(staging, dataset.files)
+        descriptor = provenance.build_provenance(resolved, dataset)
+        # The commit is inside the `try` so a failure *within* it — the file-as-`--data-out`
+        # abort, or an interrupted swap — discards the staging too. On success the staging has
+        # been renamed away, so the `except` never fires and there is nothing left to discard.
+        commit.commit(staging, data_out, descriptor.files)
     except BaseException:
-        shutil.rmtree(staging, ignore_errors=True)
+        commit.discard(staging)
         raise
-    _commit(staging, data_out)
 
 
-def _commit(staging: Path, data_out: Path) -> None:
-    """Swap the staged tree into place: the closest thing to atomic that is portable (ADR-0003).
+def _place_audio(
+    staging: Path,
+    staged_audio: dict[str, Path],
+    recordings: list[Recording],
+    split_result: split.SplitResult,
+) -> None:
+    """Move each flat Normalized WAV into `audio/<split>/<recording_id>.wav` (ADR-0003/0006).
 
-    The only window without a live `--data-out` is the sub-millisecond gap between the two renames,
-    and it is recoverable by re-running, since the build is deterministic and idempotent.
+    The WAVs were written flat during the decode loop, before any Session had a Split; once the
+    assignment is known each is renamed into its Split bucket — a rename within the staging tree, so
+    it stays on one filesystem and touches no durable output. The bucketed path is the one the
+    Manifest's `audio_filepath` records, so this is what makes the pointer true.
     """
-    staging.mkdir(parents=True, exist_ok=True)
-    previous = data_out.with_name(data_out.name + ".old")
-    shutil.rmtree(previous, ignore_errors=True)
-    if data_out.exists():
-        data_out.rename(previous)
-    staging.rename(data_out)
-    shutil.rmtree(previous, ignore_errors=True)
+    for recording in recordings:
+        target = staging / manifest.audio_path(
+            split_result.split_of(recording), recording.recording_id
+        )
+        target.parent.mkdir(parents=True, exist_ok=True)
+        staged_audio[recording.recording_id].rename(target)
 
 
 def validate(*, data_in: Path, config: Path | None) -> None:
