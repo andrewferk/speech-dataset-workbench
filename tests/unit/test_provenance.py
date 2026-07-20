@@ -285,7 +285,12 @@ class TestDescriptor:
         doc = _descriptor()
         assert doc["normalization"]["sample_rate"] == TARGET_SAMPLE_RATE
         assert doc["normalization"]["num_channels"] == 1
+        # The two derived values are asserted as literals: the module builds them from
+        # `normalize`'s constants so they cannot drift from the tool, and these pin them to the
+        # strings ADR-0010's example publishes, so the tool cannot drift from the ADR either.
         assert doc["normalization"]["encoding"] == "PCM_16"
+        assert doc["normalization"]["downmix"] == "mean"
+        assert doc["normalization"]["resampler"] == "soxr_hq"
         assert doc["hashing"]["algorithm"] == "sha256"
         assert "domain separator" in doc["hashing"]["dataset_version"]
         assert (

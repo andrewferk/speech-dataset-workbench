@@ -51,7 +51,7 @@ from dataclasses import dataclass
 from sdw import __version__
 from sdw.config import CANONICAL_JSON_SEPARATORS, Config
 from sdw.manifest import ENCODING, NUM_CHANNELS, Dataset, Sample
-from sdw.normalize import TARGET_SAMPLE_RATE
+from sdw.normalize import RESAMPLE_QUALITY, TARGET_SAMPLE_RATE, TARGET_SUBTYPE
 from sdw.split import SPLIT_ORDER
 
 # The domain separator, whose trailing `/1` versions *the scheme*. A future change to the preimage
@@ -81,9 +81,12 @@ MANIFEST_VERSION = "0.1"
 _NORMALIZATION = {
     "sample_rate": TARGET_SAMPLE_RATE,
     "num_channels": NUM_CHANNELS,
-    "encoding": "PCM_16",
+    "encoding": TARGET_SUBTYPE,
     "downmix": "mean",
-    "resampler": "soxr_hq",
+    # Imported rather than spelled `"soxr_hq"`, so a change to the resampler band cannot leave the
+    # descriptor describing a normalization the tool no longer performs. `downmix` has no upstream
+    # constant to borrow — averaging channels is what the code does, not a parameter it reads.
+    "resampler": f"soxr_{RESAMPLE_QUALITY.lower()}",
 }
 
 # The recipe, in the artifact that is its own audit trail. Prose rather than a machine format
