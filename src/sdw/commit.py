@@ -1,10 +1,12 @@
-"""The only writer: staging, the completeness sentinel, and the atomic swap (#30, ADR-0003).
+"""The only writer of `--data-out`: staging, the sentinel, and the atomic swap (#30, ADR-0003).
 
-Every durable byte a build emits passes through this module. That is the whole of ADR-0003's
-atomicity guarantee, gathered behind one door rather than spread across the stages that produce the
-content: `images`, `reports`, `manifest` and `provenance` each return *text* and hand it here, so
-there is exactly one place that touches `--data-out`, one place that knows the `.tmp`/`.old`
-protocol, and one place that decides when a build is finished.
+`--data-out` is touched in exactly one place — here. That is the whole of ADR-0003's atomicity
+guarantee ("Nothing touches `<data-out>` during the run"): the stages write their artifacts into the
+sibling staging tree, never the live output, and only this module promotes that tree into
+`--data-out`. The stages reach the staging tree by two routes — `images` and `reports` write their
+PNGs and JSONL into it directly (a PNG is not text to hand back), while `manifest` and `provenance`
+stay pure and return `{path: text}` maps that :func:`write_files` renders. Either way there is one
+place that knows the `.tmp`/`.old` protocol, and one place that decides when a build is finished.
 
 The protocol is three moves and a cleanup:
 

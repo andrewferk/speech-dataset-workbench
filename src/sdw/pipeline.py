@@ -122,10 +122,13 @@ def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
         dataset = manifest.build_dataset(recordings, split_result, durations, resolved)
         commit.write_files(staging, dataset.files)
         descriptor = provenance.build_provenance(resolved, dataset)
+        # The commit is inside the `try` so a failure *within* it — the file-as-`--data-out`
+        # abort, or an interrupted swap — discards the staging too. On success the staging has
+        # been renamed away, so the `except` never fires and there is nothing left to discard.
+        commit.commit(staging, data_out, descriptor.files)
     except BaseException:
         commit.discard(staging)
         raise
-    commit.commit(staging, data_out, descriptor.files)
 
 
 def _place_audio(

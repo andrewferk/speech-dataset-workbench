@@ -123,6 +123,19 @@ class TestAbort:
         assert not data_out.exists()
         assert not (tmp_path / "out.tmp").exists()
 
+    def test_an_abort_inside_the_commit_still_discards_the_staging(self, tmp_path: Path) -> None:
+        # The abort trigger that fires *inside* `commit.commit` rather than in a stage: `--data-out`
+        # is a regular file, so the pre-swap directory check raises. The whole tree has already been
+        # staged by then, so this is the case that proves `discard` covers a failure in the commit
+        # itself — the staged `.tmp` must not survive, and the operator's file is byte-preserved.
+        data_in = _data_in(tmp_path / "in", 6)
+        data_out = tmp_path / "out"
+        data_out.write_text("an operator's file, not a directory", encoding="utf-8")
+        assert _build(data_in, data_out) != 0
+        assert data_out.read_text(encoding="utf-8") == "an operator's file, not a directory"
+        assert not (tmp_path / "out.tmp").exists()
+        assert not (tmp_path / "out.old").exists()
+
 
 class TestStaleSiblingRecovery:
     """A crashed run's leftovers are cleaned at the next start, so recovery is just re-running."""
