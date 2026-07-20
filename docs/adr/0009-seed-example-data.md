@@ -22,7 +22,7 @@ committed third-party corpus, and buys a realism this example does not need.
   recording, and no prerequisites**.
 - The audio is **generated tones, not speech**, and `examples/README.md` says so plainly and up
   front. Prompts remain honest English sentences.
-- **The demo teaches the *shape* of a dataset, not its content — and admits it.** A row whose
+- **The demo teaches the *shape* of a dataset, not its content — and admits it.** A Sample whose
   `text` is a real sentence while its WAV is a sine tone is a mismatch we state rather than
   disguise. Every mechanical thing the workbench does — hashing, normalization, quality checks,
   session-aware splitting, manifest emission, image rendering — is exercised faithfully.

@@ -13,7 +13,7 @@ Four facts pin the shape:
   record as a parameter and this module imports none of the math that produces one. ADR-0007 takes
   `peak_dbfs` on the **Original** (pre-resample) and the low-volume RMS over the **active region**
   (silence excluded), so recomputing either from the plotted signal would put a title and a
-  `quality.jsonl` row into disagreement about one Recording — both correct, neither explained.
+  `quality.jsonl` line into disagreement about one Recording — both correct, neither explained.
   The labels admit the gap: ``peak (orig)`` and ``RMS (active)``.
 
 - **The scales are absolute and fixed.** Waveform y is always -1.0 .. +1.0 and magnitude is always
@@ -100,7 +100,7 @@ _MAGNITUDE_FLOOR = 1e-12
 _DBFS_DP = 2
 _SECONDS_DP = 3
 
-# The filename suffixes. Images share the `recording_id` stem with the audio and the quality row,
+# The filename suffixes. Images share the `recording_id` stem with the audio and the quality line,
 # so every artifact for a Recording is one `ls` away (ADR-0003).
 WAVEFORM_SUFFIX = ".waveform.png"
 SPECTROGRAM_SUFFIX = ".spectrogram.png"

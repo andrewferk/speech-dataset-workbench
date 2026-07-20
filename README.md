@@ -127,7 +127,7 @@ at three flags. See [issue #8](https://github.com/andrewferk/speech-dataset-work
     <recording_id>.waveform.png
     <recording_id>.spectrogram.png
   reports/
-    quality.jsonl           # one row per recording: all metrics + flags
+    quality.jsonl           # one line per recording: all metrics + flags
     summary.txt             # human-readable build digest
 ```
 

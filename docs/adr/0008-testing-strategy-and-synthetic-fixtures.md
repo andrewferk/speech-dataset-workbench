@@ -52,7 +52,7 @@ The bulk of assertions are pure/near-pure **unit tests**, pushed as far down as 
 normalization (downmix-mean, soxr 16 kHz, `PCM_16`, passthrough, idempotence), quality-metric math
 against signals with known peak/RMS/duration and deliberate flag-tripping, id and `dataset_version`
 hashing, session-water-fill split determinism (same seed → same partition, the ≥3-sessions rule, the
-<3 produce-and-flag path), manifest rows and both consumer views, and `recordings.csv` parsing
+<3 produce-and-flag path), manifest lines and both consumer views, and `recordings.csv` parsing
 (absolute/`..` path rejection, unlisted-files-ignored). A **thin end-to-end layer** runs full
 `build`/`validate` invocations for the things only a whole run reveals: exit codes, the atomic commit,
 cross-artifact consistency, and artifact byte-stability. Metric math is never tested through an e2e

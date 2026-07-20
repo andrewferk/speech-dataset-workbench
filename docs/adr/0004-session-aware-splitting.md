@@ -149,8 +149,8 @@ Taking the *largest* was rejected as the worst case for ratio fidelity, optimizi
 ### Recording the split
 
 - **No separate splits file.** The partition lives entirely in the per-split `train.jsonl` /
-  `val.jsonl` / `test.jsonl`, the `split` field on each manifest row, and the `audio/<split>/…`
-  buckets (#5, ADR-0003). The Session→split mapping is fully derivable from the rows
+  `val.jsonl` / `test.jsonl`, the `split` field on each manifest line, and the `audio/<split>/…`
+  buckets (#5, ADR-0003). The Session→split mapping is fully derivable from the lines
   (`session_id` + `split`).
 - **`dataset.json`** records the effective `seed` + ratios (part of the `dataset_version` input per
   #8) and the **realized per-split counts** (Samples and Sessions per split); the human summary
@@ -220,7 +220,7 @@ comparison on `summary.txt` still holds.
   bootstrapping phase (1–2 Sessions). Produce-and-flag keeps the tool usable from the first Session
   while making emptiness impossible to miss.
 - **A dedicated splits file / session→split map artifact** — redundant; the per-split manifests +
-  `split` field + audio buckets already encode the partition and it is derivable from the rows.
+  `split` field + audio buckets already encode the partition and it is derivable from the lines.
 - **Exposing `group_by = "session" | "speaker"`** — broader than v0.1 needs (narrow > broad); the
   single-speaker reality fixes the choice to Session.
 - **A configurable ratio-deviation warning threshold** (`[split].deviation_warn`, warn when realized

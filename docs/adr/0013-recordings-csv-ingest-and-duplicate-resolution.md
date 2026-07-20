@@ -52,7 +52,7 @@ resolve + identify, a strictly earlier stage than the decode gate, not a competi
 
 ADR-0001 says byte-identical Originals collapse to one Recording. Two rows with byte-identical audio
 but a different `session_id`, `prompt_text`, `speaker_id`, `device`, or `environment` collapse to
-one `recording_id` and one audio path, yet imply **two conflicting Manifest rows**. No prior ADR
+one `recording_id` and one audio path, yet imply **two conflicting Manifest lines**. No prior ADR
 resolves this.
 
 - **Byte-identical Originals whose metadata agrees collapse to one Recording** (ADR-0001) — the same
