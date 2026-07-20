@@ -7,8 +7,8 @@ documents for an auditor, so the test is the audit.
 """
 
 import hashlib
+import importlib.metadata
 import json
-import tomllib
 from pathlib import Path
 from typing import Any
 
@@ -158,13 +158,13 @@ class TestSensitivity:
 
 
 class TestToolVersion:
-    def test_matches_the_declared_project_version(self) -> None:
-        # `__version__` is the source `tool_version` reads, not `importlib.metadata` — which
-        # ADR-0014 made available but which reports the version recorded at install time (ADR-0010,
-        # as amended). This is what stops the two literals drifting until #37 removes one of them.
-        root = Path(__file__).resolve().parents[2]
-        with (root / "pyproject.toml").open("rb") as handle:
-            assert tomllib.load(handle)["project"]["version"] == __version__
+    def test_metadata_derives_from_the_single_declaration(self) -> None:
+        # Not a drift test over two literals — there is only one now (#37). This checks the other
+        # direction: that pyproject's `dynamic = ["version"]` + `[tool.hatch.version]` wiring
+        # actually resolves, so `importlib.metadata.version("sdw")` answers with the declared
+        # `__version__` rather than raising. `tool_version` still reads `__version__` directly
+        # (ADR-0010); this only guards the claim that the package is not lying about its version.
+        assert importlib.metadata.version("sdw") == __version__
 
 
 def _dataset(config: Config, sizes: dict[str, int] | None = None) -> Dataset:
