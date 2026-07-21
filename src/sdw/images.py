@@ -95,6 +95,11 @@ COLORMAP = "magma"
 # measurement (ADR-0007 owns the reported -120 floor).
 _MAGNITUDE_FLOOR = 1e-12
 
+# The subtree this module writes into, owned here as `reports` owns its own: every directory under
+# `--data-out` is named by exactly one module, so the tree's shape is never reassembled from string
+# literals in the code that composes the paths (ADR-0003).
+IMAGES_DIR = "images"
+
 # The filename suffixes. Images share the `recording_id` stem with the audio and the quality line,
 # so every artifact for a Recording is one `ls` away (ADR-0003).
 WAVEFORM_SUFFIX = ".waveform.png"

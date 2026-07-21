@@ -3,10 +3,11 @@
 `--data-out` is touched in exactly one place — here. That is the whole of ADR-0003's atomicity
 guarantee ("Nothing touches `<data-out>` during the run"): the stages write their artifacts into the
 sibling staging tree, never the live output, and only this module promotes that tree into
-`--data-out`. The stages reach the staging tree by two routes — `images` and `reports` write their
-PNGs and JSONL into it directly (a PNG is not text to hand back), while `manifest` and `provenance`
-stay pure and return `{path: text}` maps that :func:`write_files` renders. Either way there is one
-place that knows the `.tmp`/`.old` protocol, and one place that decides when a build is finished.
+`--data-out`. What goes into that tree is :mod:`sdw.staging`'s, which is this module's only caller
+(ADR-0003 as amended by #64); the stages reach it by two routes — `images` and `reports` write their
+PNGs and JSONL in directly (a PNG is not text to hand back), while `manifest` and `provenance` stay
+pure and return `{path: text}` maps that :func:`write_files` renders. Either way there is one place
+that knows the `.tmp`/`.old` protocol, and one place that decides when a build is finished.
 
 The protocol is three moves and a cleanup:
 
