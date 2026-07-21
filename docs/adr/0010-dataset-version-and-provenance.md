@@ -79,21 +79,23 @@ default values describe the same build and must yield the same id.
 committed (research #3), and the release rule is that **any lock change ships a version bump**.
 
 This ADR originally said "read from package metadata". Amended by #29: the string is declared in
-`src/sdw/__init__.py` instead, and a test asserts it equals pyproject's `[project].version` so the
-two cannot drift.
+`src/sdw/__init__.py` instead. Amended again by #37: `pyproject.toml` now *derives* its version from
+that source (`dynamic = ["version"]` + `[tool.hatch.version] path = "src/sdw/__init__.py"`), so
+`__version__` is the **single declaration** and the drift test that policed the duplicate is gone —
+a drift test over one source of truth has nothing to catch.
 
-The original reason was that there was no metadata to read — ADR-0012 set `package = false` and the
-tool ran off the source tree, so `importlib.metadata` would raise. ADR-0014 has since added a build
-backend, so that reason is gone and `importlib.metadata.version("sdw")` now resolves. **The
-conclusion stands anyway, for a better reason:** `tool_version` is a hash input, and
-`importlib.metadata` reports what was written into `.dist-info` at *install* time, not what is in
-the tree now. A bumped version without a re-sync would mint ids under the stale string while the
-source said otherwise — two contributors on byte-identical source, different `dataset_version`.
-That is precisely the bookkeeping this ADR exists to avoid, and it fails silently.
-
-The duplication that remains — the same literal in `__init__.py` and in `pyproject.toml`, held
-together by a test — is #37's to remove, by having pyproject *derive* its version from the source
-(`dynamic = ["version"]`) rather than by having the source read the install.
+**`tool_version` reads the source tree, not `importlib.metadata`, on purpose.** The original reason
+was that there was no metadata to read — ADR-0012 set `package = false` and the tool ran off the
+source tree, so `importlib.metadata` would raise. ADR-0014 has since added a build backend, so that
+reason is gone and `importlib.metadata.version("sdw")` now resolves. **The conclusion stands anyway,
+for a better reason:** `tool_version` is a hash input, and `importlib.metadata` reports what was
+written into `.dist-info` at *install* time, not what is in the tree now. A bumped version without a
+re-sync would mint ids under the stale string while the source said otherwise — two contributors on
+byte-identical source, different `dataset_version`. That is precisely the bookkeeping this ADR
+exists to avoid, and it fails silently. Deriving metadata from the source (rather than the source
+reading metadata) satisfies "no duplicated constant" without moving the hash input off the tree:
+anyone who asks `importlib.metadata` gets the right answer, and `tool_version` still reads the line
+that produced it.
 
 The residual — a `soxr` bump changing Normalized WAV bytes under an unchanged id — is a consequence
 of the scheme, not a defect in it. `dataset_version` identifies **the manifest and the config**; the

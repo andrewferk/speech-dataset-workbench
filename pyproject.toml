@@ -1,6 +1,9 @@
 [project]
 name = "sdw"
-version = "0.1.0"
+# `version` lives once in `src/sdw/__init__.py` and is derived here at build time (#37). It is a
+# `dataset_version` hash input, so it must read the source tree, not the install (ADR-0010); deriving
+# rather than duplicating means `importlib.metadata.version("sdw")` still answers correctly.
+dynamic = ["version"]
 description = "Speech Dataset Workbench — a local-first CLI that turns prompted speech recordings into a validated, reproducible, versioned dataset."
 requires-python = ">=3.13"
 dependencies = [
@@ -19,6 +22,9 @@ sdw = "sdw.cli:main"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+path = "src/sdw/__init__.py"
 
 [dependency-groups]
 dev = [
