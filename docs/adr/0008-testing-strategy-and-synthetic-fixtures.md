@@ -159,10 +159,20 @@ tests/
   **Contract-pinning assertions spell paths literally and must stay that way.** ADR-0003's tree is
   *published*: consumers outside this repo read it, and `datasets` finds `audio/<split>/metadata.jsonl`
   by convention. Renaming `audio/` to `data/` is a breaking change and must turn the suite red. The
-  literal is the specification, not duplication. These live in the golden e2e's committed list of
-  stable artifacts, in the CLI-level assertions on the committed tree, and in the manifest's own
-  `audio_filepath` and HF-metadata-key tests. Consolidating any of them into shared constants would
-  disarm the assertion while leaving it green — the failure mode this note exists to prevent.
+  literal is the specification, not duplication. Two distinct mechanisms pin it, and it is worth
+  being precise about which does what:
+
+  - **Committed golden *bytes*.** `train/val/test.jsonl` carry `"audio_filepath":"audio/<split>/…"`
+    inside them, so renaming `audio/` fails the byte comparison. `STABLE_ARTIFACTS` in the golden
+    e2e pins the *filenames* `dataset.json`, `reports/quality.jsonl`, `reports/summary.txt` — it
+    contains no `audio/` entry, so it is the goldens' content, not that list, that guards the audio
+    subtree.
+  - **Literal assertions in tests.** The Manifest's own `audio_filepath` and HF-metadata-key tests
+    (`test_manifest.py`), the committed-tree shape assertions after a `build` (`test_pipeline_commit.py`,
+    `test_pipeline_images.py`), and the worked-example e2e (`test_example_build.py`).
+
+  Consolidating any of these into shared constants would disarm the assertion while leaving it
+  green — the failure mode this note exists to prevent.
 
   **Consistency assertions may import `manifest.AUDIO_DIR`, `images.IMAGES_DIR`,
   `reports.REPORTS_DIR`, `provenance.DESCRIPTOR_NAME`, or `manifest.audio_path`, and often should.**
