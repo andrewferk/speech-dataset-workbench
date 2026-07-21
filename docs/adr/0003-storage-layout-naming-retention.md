@@ -93,6 +93,16 @@ is on macOS), so "atomic" means *no partial build is ever visible as finished*.
   non-zero (issue #8 abort policy). Stale `*.tmp`/`*.old` from a crash are cleaned at the next run's
   start. Recovery is just re-running, since the build is deterministic/idempotent.
 
+> **Amended by #64 — who writes what.** This section fixes the protocol but never said which code
+> may write where, and the implementation had settled on "`commit` is the only writer" as shorthand.
+> Stated precisely: **`commit` is the only writer of `<data-out>` itself** — the sentinel and the
+> swap are its and no one else's, so the atomicity guarantee has one auditable enforcement point.
+> Writing *into* the staging tree is a different act, and always was: the image and report stages
+> have written their PNGs and JSONL into `<data-out>.tmp` since they landed. #64 gives that side of
+> the line an owner — a `staging` module that composes every path under the staging root and places
+> every artifact in it, sitting above `commit` as its only caller. Nothing about the three moves,
+> the sentinel, or the abort behaviour changes; the committed tree is byte-identical.
+
 ### Retention
 
 Retention is a consequence of the stateless in→out shape (ADR-0002), not a separate feature or knob.
