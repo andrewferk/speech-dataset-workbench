@@ -26,9 +26,12 @@ Three facts pin the shape:
   the partition, which is fine because a changed input is already a new ``dataset_version``.
 
 **The disclosures are returned as data, not rendered.** The repair moves, the speaker-overlap
-finding, the targets beside the realized counts, and the emptiness flag are all fields on the
+finding, the targets beside the realized counts, and the below-minimum flag are all fields on the
 result; `summary.txt` (#10) owns the prose. That keeps this module a pure function and keeps the
 one place that phrases a split fact from being three.
+
+The result carries what a caller reads and no more (#70) — see :class:`SplitResult` for the rule
+and for the quantities that are a caller's own subtraction rather than a field.
 """
 
 import hashlib
@@ -88,11 +91,21 @@ class SplitResult:
     configures 80-10-10 and receives 50-25-25 is looking at arithmetic — whole Sessions are
     indivisible — and both numbers being present lets them draw that conclusion themselves.
 
-    ``empty_splits`` and ``below_min_sessions`` are two different facts and the warning that
-    renders them is not the same warning. An empty Split with three or more Sessions would mean
-    the repair failed to buy a promise the tool made; below three it means a three-way split was
-    never arithmetically available. Collapsing them would leave #10 unable to tell the operator
-    which of those happened — and only one of them is about their data.
+    **A field belongs here if a caller reads it, or if it is read and its derivation encodes a
+    decision this module owns** (#70). Per-Split Session counts, per-Split deficits, and the set
+    of empty Splits were all once fields and are none of them now: each is arithmetic over a field
+    still published here — a count over ``assignments``, ``targets`` less ``samples``, a
+    ``samples`` count of zero — and the arithmetic carries no decision, so a caller that wants one
+    can do it. ``below_min_sessions`` stays under the second clause: the
+    :data:`MIN_SESSIONS_FOR_REPAIR` comparison is this module's rule about when it makes the
+    non-emptiness promise, and #10 re-deriving it would put that judgement in the renderer.
+
+    There is deliberately no companion flag for an empty Split at or above
+    :data:`MIN_SESSIONS_FOR_REPAIR` Sessions — the "repair failed to buy a promise the tool made"
+    case. ADR-0004's pigeonhole argument proves an eligible donor always exists there, so the
+    warning would be prose no build can emit. Were the proof ever to stop holding, the failure is
+    already legible in `summary.txt`: a realized count of zero beside a nonzero target, with no
+    repair line beneath it.
     """
 
     assignments: dict[str, str]
@@ -100,11 +113,8 @@ class SplitResult:
     total_samples: int
     targets: dict[str, float]
     samples: dict[str, int]
-    sessions: dict[str, int]
-    deficits: dict[str, float]
     moves: tuple[RepairMove, ...]
     speaker_overlaps: tuple[SpeakerOverlap, ...]
-    empty_splits: tuple[str, ...]
     below_min_sessions: bool
 
     def split_of(self, recording: Recording) -> str:
@@ -128,18 +138,14 @@ def split_sessions(recordings: Sequence[Recording], config: SplitConfig) -> Spli
     assignments = _water_fill(order, sizes, targets)
     moves = _repair(assignments, order, sizes, targets)
 
-    samples = _samples_per_split(assignments, sizes)
     return SplitResult(
         assignments=assignments,
         order=order,
         total_samples=total,
         targets=targets,
-        samples=samples,
-        sessions=_sessions_per_split(assignments),
-        deficits={name: targets[name] - samples[name] for name in SPLIT_ORDER},
+        samples=_samples_per_split(assignments, sizes),
         moves=moves,
         speaker_overlaps=_speaker_overlaps(recordings, assignments),
-        empty_splits=tuple(name for name in SPLIT_ORDER if not samples[name]),
         below_min_sessions=len(order) < MIN_SESSIONS_FOR_REPAIR,
     )
 
