@@ -61,10 +61,11 @@ Images and the Normalized WAV are produced inside the loop instead of in a later
 **Rendering precedes splitting.** `images` runs inside the decode loop, while `split` runs only
 after every Recording has been collected — so an Image exists before its Recording has a Split, and
 `images` can depend on nothing the splitter decides. The module docstrings number splitting as the
-fourth stage and image rendering as the fifth: that ordering is logical, not temporal. *Contradicts
-[ADR-0011](adr/0011-visualization-output.md), which orders the pipeline
-`normalize → validate → split → manifest → images → report` — worth reopening, because as built
-images precede both.*
+fourth stage and image rendering as the fifth: that ordering is logical, not temporal.
+[ADR-0011](adr/0011-visualization-output.md) and
+[ADR-0012](adr/0012-v0-1-acceptance-criteria.md) cited the older `normalize → validate → split →
+manifest → images → report` sketch; both were amended by #88 to the as-built order, and neither
+decision changed — images consume the quality stage's metrics either way.
 
 **`staging` owns *what* goes into the tree; `commit` owns *when* it becomes a Dataset.** They are
 separate modules because a placement bug and a swap bug have different tests and different fixes.
