@@ -170,6 +170,38 @@ flag is a category error in that field.
 - `[quality]` thresholds no longer reach the image stage at all, so a threshold change redraws
   nothing.
 
+## Amendment: the pipeline order cited above is stale (added by #88)
+
+Two lines in *Consequences* justify their claims with an ordering the shipped code does not have:
+
+> - **`validate` renders nothing.** #8 defines it as stages 1–4, read-only, stdout only; images are
+>   stage 5.
+
+> Consistent with #8's `normalize → validate → split → manifest → images → report`.
+
+That list is **historical** — #8's planning-time sketch, not the built pipeline. As built
+(`src/sdw/pipeline.py`, `src/sdw/staging.py`), the order is:
+
+`ingest → normalize → quality → images → split → report → manifest`
+
+Four corrections. **Ingest is a stage**, and the cited list omits it entirely: `recordings.csv`
+parsing and Original resolution (`ingest.py`, ADR-0013) run first, inside `_preflight`, for both
+commands. **`validate` does not run stages 1–4** — it is `_preflight` then `analyze`, and stops; it
+never splits and never builds a Manifest. **Images precede splitting** rather than following the
+Manifest: `staging.StagedTree.add` renders inside the decode loop, while the audio is still in hand,
+so an Image exists before its Recording has a Split. And **reports are written before the
+Manifest**, not after it.
+
+**Both conclusions survive, and one is stronger than argued.** `validate` renders nothing not
+because images are a later stage it stops short of, but because it is handed no output path at all —
+writing is unreachable from everything it calls (see `docs/architecture.md`). And images still
+depend on quality and never the reverse: quality runs before images in the as-built order too, and
+ADR-0012 made the dependency structural — `images.render` takes a `QualityMetrics` parameter and the
+module imports none of the math that produces one. Recomputation is unwritable, which is what the
+ordering constraint was reaching for.
+
+So this corrects the rationale, not the decision. Nothing above is reopened.
+
 ## Rejected alternatives
 
 - **Flagged-Recordings-only rendering** — rejected; makes `images/` contents a function of `[quality]`
@@ -196,34 +228,3 @@ flag is a category error in that field.
 - **A bespoke PNG writer (numpy + zlib)** — rejected; hundreds of lines re-implementing matplotlib,
   against v0.1's avoid-premature-engineering principle.
 - **Warn-and-skip on render failure** — rejected; invents a third outcome and breaks the 1:1 mirror.
-
-## Amendment: the pipeline order cited above is stale (added by #88)
-
-Two lines in *Consequences* justify their claims with an ordering the shipped code does not have:
-
-> - **`validate` renders nothing.** #8 defines it as stages 1–4, read-only, stdout only; images are
->   stage 5.
-
-> Consistent with #8's `normalize → validate → split → manifest → images → report`.
-
-That list is **historical** — #8's planning-time sketch, not the built pipeline. As built
-(`src/sdw/pipeline.py`, `src/sdw/staging.py`), the order is:
-
-`ingest → normalize → quality → images → split → report → manifest`
-
-Three corrections. **Ingest is a stage**, and the cited list omits it entirely: `recordings.csv`
-parsing and Original resolution (`ingest.py`, ADR-0013) run first, inside `_preflight`, for both
-commands. **`validate` does not run stages 1–4** — it is `_preflight` then `analyze`, and stops; it
-never splits and never builds a Manifest. And **images precede splitting**, not follow the Manifest:
-`staging.StagedTree.add` renders inside the decode loop, while the audio is still in hand, so an
-Image exists before its Recording has a Split. Reports are written before the Manifest, not after.
-
-**Both conclusions survive, and one is stronger than argued.** `validate` renders nothing not
-because images are a later stage it stops short of, but because it is handed no output path at all —
-writing is unreachable from everything it calls (see `docs/architecture.md`). And images still
-depend on quality and never the reverse: quality runs before images in the as-built order too, and
-ADR-0012 made the dependency structural — `images.render` takes a `QualityMetrics` parameter and the
-module imports none of the math that produces one. Recomputation is unwritable, which is what the
-ordering constraint was reaching for.
-
-So this corrects the rationale, not the decision. Nothing above is reopened.
