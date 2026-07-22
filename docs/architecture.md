@@ -30,7 +30,7 @@ The spine, as built:
                     │
         ┌───────────┴───────────┐
      analyze                 staging            build only
-   (metrics only)          add / finish
+   (metrics only)     open → add → finish
                                │
                             commit               the only writer of --data-out
 ```
@@ -46,25 +46,25 @@ is clean: `HardError` is raised in six modules, and the four the shared stages r
 directory, and `images` fails on a render. So a green `validate` settles every hard error derivable
 from the input, and only those.
 
-**`validate` writes nothing because it has nowhere to write.** `pipeline.analyze` is `validate`'s
-whole body, and it is never handed an output path. Not a flag that could be set wrong, not a branch
-that could be taken by mistake: writing is unreachable from the function `validate` calls.
+**`validate` writes nothing because it has nowhere to write.** Its body is `_preflight`, then
+`analyze`, then a `print` of the digest — and not one of those is handed an output path. Where
+`build` takes a `--data-out` and passes it to `staging`, `validate` has no such argument to pass on.
+Not a flag that could be set wrong, not a branch that could be taken by mistake: writing is
+unreachable from everything `validate` calls.
 
 **The decode loop is a generator, and that is why `build` is shaped the way it is.** `_measured`
-yields one Recording with its Normalized audio and its metrics at a time, because a Dataset's worth
-of decoded float64 does not fit in memory. `build` therefore cannot receive a finished list and hand
-it onward — it must consume each Recording while its audio is still in hand. That is why
-`staging.StagedTree.add` takes one Recording rather than a collection, and why the Images and the
-Normalized WAV are produced inside the loop.
+yields one Recording at a time rather than returning a collection, so `build` cannot receive a
+finished list and hand it onward — it must consume each Recording while its audio is still in hand.
+That is why `staging.StagedTree.add` takes one Recording rather than a collection, and why the
+Images and the Normalized WAV are produced inside the loop instead of in a later pass.
 
 **Rendering precedes splitting.** `images` runs inside the decode loop, while `split` runs only
 after every Recording has been collected — so an Image exists before its Recording has a Split, and
-`images` can depend on nothing the splitter decides. Note that the module docstrings number
-splitting as the fourth stage and image rendering as the fifth: that ordering is logical, not
-temporal. [ADR-0011](adr/0011-visualization-output.md) states the pipeline order as
-`normalize → validate → split → manifest → images → report` and describes `validate` as stages 1–4;
-as built, `validate` is stages 1–3 and images precede both splitting and the Manifest. The code is
-the authority here and the ADR's ordering is stale, which is noted rather than silently adopted.
+`images` can depend on nothing the splitter decides. The module docstrings number splitting as the
+fourth stage and image rendering as the fifth: that ordering is logical, not temporal. *Contradicts
+[ADR-0011](adr/0011-visualization-output.md), which orders the pipeline
+`normalize → validate → split → manifest → images → report` — worth reopening, because as built
+images precede both.*
 
 **`staging` owns *what* goes into the tree; `commit` owns *when* it becomes a Dataset.** They are
 separate modules because a placement bug and a swap bug have different tests and different fixes.
@@ -83,7 +83,9 @@ discipline but by structure: no other module can write it, and the swap follows 
 
 **An abort anywhere leaves the last good Dataset untouched.** No stage can damage `--data-out`,
 because no stage can reach it — the staging tree absorbs every failure, and an interrupt is no
-different from a hard error. No build is ever visible half-finished.
+different from a hard error. `build` spends its whole life inside `staging.open`'s scope, `finish`
+included, so there is no window in which a failure escapes that guarantee. No build is ever visible
+half-finished.
 
 **The splitter always sees the fixed surviving set.** [ADR-0004](adr/0004-session-aware-splitting.md)
 requires that every Recording has survived `normalize` and `quality` before any Session is placed;
