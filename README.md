@@ -21,12 +21,14 @@ pass:
 1. **Parse** the operator-authored `recordings.csv` index.
 2. **Resolve & decode** every referenced Original (PCM WAV only).
 3. **Normalize** to mono · 16 kHz · 16-bit PCM WAV, deterministically.
-4. **Measure quality** — energy/amplitude metrics per recording, against the normalized audio.
+4. **Measure quality** — energy/amplitude metrics per recording, against the normalized audio;
+   clipping is the exception, tapped off the decoded Original before the downmix and resample
+   ([ADR-0007](docs/adr/0007-audio-validation-quality-checks.md)).
 5. **Split** into train/validation/test, session-aware.
 6. **Emit** per-split manifests, a `dataset.json` descriptor, waveform + spectrogram PNGs, and
    quality reports.
 
-The input is a fixed `recordings.csv` at the root of `--data-in`, one row per recording —
+The input is a fixed `recordings.csv` at the root of `--data-in`, one row per Original —
 hand-authorable in a spreadsheet:
 
 ```csv
@@ -44,7 +46,8 @@ effective config and tool version: `--data-in` is external and read-only, `--dat
 and fully regenerable. Originals are never copied, moved, or modified. `--data-out` holds exactly
 one build and is replaced wholesale each run via an atomic staging swap — an aborted build leaves it
 untouched. There is no `init`, `import`, or `delete` command: deleting a recording means removing
-its file from `--data-in` and rebuilding.
+its file from `--data-in` and rebuilding
+([ADR-0002](docs/adr/0002-stateless-data-in-data-out.md)).
 
 ## Install
 
@@ -102,7 +105,7 @@ directory and a failed image render.
 | --- | --- |
 | `0` | Success. |
 | `1` | Hard error — aborted, no durable output; the message goes to stderr as `error: …`. |
-| `2` | Usage error — a bad flag or a missing subcommand. |
+| `2` | Usage error — an unknown flag, a bad subcommand, or a missing required flag. |
 
 All tuning lives in an optional TOML config rather than per-parameter flags, so the CLI stays at
 three flags. Nine keys across `[manifest]`, `[quality]`, and `[split]`; an unknown section or key is
@@ -110,7 +113,11 @@ a hard error rather than a silent no-op. Every key, its default, and its effect 
 [`docs/usage.md`](docs/usage.md).
 
 `python -m sdw` is equivalent to `sdw` and reaches the same parser, wherever the venv's interpreter
-does.
+does ([ADR-0014](docs/adr/0014-build-backend-and-installed-entry-point.md)).
+
+If you have not run either command before, [`examples/README.md`](examples/README.md) walks both
+against the committed example dataset; [`docs/usage.md`](docs/usage.md) is the reference to reach
+for once you are pointing them at your own recordings.
 
 ## What you get
 
@@ -162,16 +169,17 @@ The scope was narrowed hard, and these exclusions are design boundaries, not gap
   install and not the standalone one.
 - **`dataset_version` is recomputable from `--data-out` alone**, without the inputs — a `sha256`
   over the emitted manifest bytes, the effective config, and the tool version. The recipe is
-  [`docs/auditing.md`](docs/auditing.md); there is no `verify` command because the recipe is all it
-  would be.
+  [`docs/auditing.md`](docs/auditing.md)
+  ([ADR-0010](docs/adr/0010-dataset-version-and-provenance.md)); there is no `verify` command
+  because the recipe is all it would be.
 - **Privacy is architectural.** Captured audio never enters git because it lives only in the two
   external directories the repo never contains — not because a gitignore rule blocks it. Metadata
   is pseudonym-only, so the manifest is freely shareable.
 - **All attempts are data.** Quality flags (`clipping`, `low_volume`, `duration_out_of_range`) are
   advisory metadata; a flag never drops or quarantines a recording. Structural errors — a file that
   won't parse, resolve, or decode — hard-abort the whole build instead.
-- **Splits are session-aware.** A session is never torn across splits. Ratios (default 80/10/10,
-  seeded) are **best-effort at session granularity** — non-emptiness is the promise, exact ratios
+- **Splits are session-aware.** A Session is never torn across splits. Ratios (default 80/10/10,
+  seeded) are **best-effort at Session granularity** — non-emptiness is the promise, exact ratios
   are not, and the tool says so out loud when it repairs a split.
 - **Images state measurements, never verdicts.** Fixed absolute scales mean an image can never
   contradict a quality flag — a quiet recording looks quiet.
