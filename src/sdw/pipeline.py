@@ -37,7 +37,8 @@ def _preflight(data_in: Path, config: Path | None) -> tuple[Config, list[Recordi
 
     Config loading — including split-ratio validation (ADR-0004/0007, #23) — happens here so
     that `validate` aborts on an illegal ratio too. If it lived in the splitter (a later stage
-    than `validate` reaches), a green preflight could not promise a hard-error-free `build`. Ingest
+    than `validate` reaches), a green preflight could not promise a `build` free of the hard errors
+    derivable from `--data-in` or `--config` — the whole of what it does promise. Ingest
     runs here for the same reason: `recordings.csv` structural failures (#24) must abort `validate`,
     not just `build`. Config is loaded first so a bad ratio aborts before any file is read.
     """
@@ -74,9 +75,9 @@ def analyze(
 ) -> list[tuple[str, QualityMetrics]]:
     """Normalize and measure every Recording, keeping only its metrics. Writes nothing.
 
-    `validate`'s whole body, and the reason `validate` cannot render an Image by accident: it is
-    not that a flag is off, it is that the only function it calls has nowhere to write to
-    (ADR-0011).
+    `validate`'s measuring half — it runs after `_preflight` and its metrics are what the digest
+    renders — and the reason `validate` cannot render an Image by accident: it is not that a flag
+    is off, it is that the only function it calls has nowhere to write to (ADR-0011).
     """
     return [
         (recording.recording_id, metrics)
@@ -103,7 +104,8 @@ def validate(*, data_in: Path, config: Path | None) -> None:
     """Preflight `data_in`, print the quality digest, and write nothing, anywhere (ADR-0002).
 
     Normalization runs here in full and the audio is discarded: `validate`'s promise is that a
-    green run means `build` will not hit a hard error, so it has to decode every Original too.
+    green run means `build` will not hit a hard error derivable from `--data-in` or `--config`, so
+    it has to decode every Original too.
     Quality flags are advisory and never affect the exit code — a flagged Recording still exits 0,
     because the operator curates by editing `recordings.csv`, not by the tool refusing to proceed.
     """
