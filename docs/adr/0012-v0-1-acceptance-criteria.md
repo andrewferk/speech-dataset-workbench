@@ -248,6 +248,30 @@ the ADR read as more foresighted than it was, and the honest record of why we ch
 more than a tidy one. Anyone revisiting the shape needs to know the repair was **discovered, not
 designed** — that tells them it is a fact about 4-Session corpora, not a property someone wanted.
 
+## Amendment: `validate` is not "stages 1–4" (added by #88)
+
+*A constraint made structural instead of tested* closes on:
+
+> It also makes the stage dependency explicitly one-way — images depend on quality, never the
+> reverse — which matches pipeline order and keeps `validate` (stages 1–4, renders nothing)
+> trivially coherent.
+
+The parenthetical cites #8's planning-time order, `normalize → validate → split → manifest → images
+→ report`, which the shipped code does not have. As built it is `ingest → normalize → quality →
+images → split → report → manifest`: ingest is a real stage the old list omits, images render inside
+the decode loop *before* any Session has a Split, and `validate` is `_preflight` then `analyze` and
+stops — it reaches neither `split` nor `manifest`, so "stages 1–4" names a range it never runs. See
+ADR-0011's matching amendment.
+
+**The argument it was supporting is unharmed, and was right.** Images depend on quality and never
+the reverse — quality still precedes images in the as-built order — and this ADR is the reason that
+holds by construction rather than by ordering: `images.render` takes the `QualityMetrics` as a
+parameter. `validate` remains trivially coherent for a stronger reason than "it stops before stage
+5": it is handed no output path at all, so writing is unreachable from everything it calls.
+
+Read the paragraph as this ADR invited above — *"this ADR should lose the argument, not the code"*.
+The ordering argument has lost; the constraint it argued for is in the signature.
+
 ## Consequences
 
 - "v0.1 is done" becomes checkable rather than felt, and `v0.1.0` is the event that makes it so.
