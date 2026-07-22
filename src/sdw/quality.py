@@ -27,7 +27,7 @@ Three facts pin the shape:
 """
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, fields
 
 import numpy as np
 import numpy.typing as npt
@@ -63,8 +63,10 @@ FLAGS = (FLAG_CLIPPING, FLAG_LOW_VOLUME, FLAG_DURATION_OUT_OF_RANGE)
 # Precision for every rendered form of these metrics (ADR-0007): dBFS 2 dp, ratios 4 dp, seconds
 # 3 dp. Applied at render time rather than at measurement, so the digest and `quality.jsonl` round
 # one set of full-precision numbers the same way instead of rounding twice. Public because
-# :mod:`sdw.reports` renders the same metrics and must agree by construction rather than by two
-# modules happening to hold the same literals (#32).
+# :mod:`sdw.images` titles and the Manifest's `duration` render the same quantities and must agree
+# by construction rather than by two modules happening to hold the same literals (#32). The
+# `quality.jsonl` path no longer reads them directly — it goes through
+# :meth:`QualityMetrics.rounded`, which applies them from :data:`_PRECISION` (#68).
 #
 # They govern *how many places a number is worth*, not how it is spelled, so they are equally the
 # `round` in `quality.jsonl` and the Manifest's `duration` and the f-string width in an image title
@@ -75,6 +77,24 @@ FLAGS = (FLAG_CLIPPING, FLAG_LOW_VOLUME, FLAG_DURATION_OUT_OF_RANGE)
 DBFS_DP = 2
 RATIO_DP = 4
 SECONDS_DP = 3
+
+# Which of the three each metric is measured in. Private, because it is not a decision a caller
+# makes — the constants above are the decision, and this only records which one each field takes.
+#
+# It is deliberately *not* the source of truth for which metrics exist:
+# :meth:`QualityMetrics.rounded` walks the dataclass, so a new metric is carried into
+# `quality.jsonl` the day it is declared rather than the day someone remembers a second list. A
+# field declared without an entry here raises on the next render — a loud failure, where restating
+# the field names in :mod:`sdw.reports` used to drop the metric from the record in silence (#68).
+_PRECISION = {
+    "duration_s": SECONDS_DP,
+    "peak_dbfs": DBFS_DP,
+    "clip_ratio": RATIO_DP,
+    "active_rms_dbfs": DBFS_DP,
+    "leading_silence_s": SECONDS_DP,
+    "trailing_silence_s": SECONDS_DP,
+    "silence_ratio": RATIO_DP,
+}
 
 
 @dataclass(frozen=True)
@@ -93,6 +113,37 @@ class QualityMetrics:
     trailing_silence_s: float
     silence_ratio: float
     flags: tuple[str, ...]
+
+    def rounded(self) -> dict[str, float]:
+        """The numeric metrics at ADR-0007 precision, keyed by name in declaration order.
+
+        The rendering `quality.jsonl` is built from (#68). Rounded here rather than at measurement,
+        so the full-precision floats stay on the dataclass for the digest and the image titles to
+        format to their own widths — each rendering derives from the measured number rather than
+        from another rendering's already-rounded one.
+
+        Rounding at render is also what lets the file be an exact golden: two runs that agree to
+        within a float ULP still serialize identically, so ADR-0008's comparison needs no tolerance
+        machinery.
+
+        ``round`` rather than fixed-decimal strings, because these stay JSON numbers for a consumer
+        that parses them — the human-facing renderings format for column width, which is a decision
+        about the artifact and stays with the artifact. That split is deliberate and was the thing
+        weighed when this method was designed: a `format(field)` here would have to decide the unit
+        suffix, the separator and the column width too, which is most of what the four call sites
+        differ on. Precision is a decision about the metric; spelling is a decision about the
+        artifact (#54, #68).
+
+        Declaration order *is* the key order of a `quality.jsonl` line. That makes reordering the
+        fields above an output change; ``test_key_order_is_fixed_not_insertion_dependent`` is what
+        says so out loud, since the reports are deliberately excluded from `dataset_version`
+        (ADR-0010) and so a reorder cannot be caught by a version mismatch.
+        """
+        return {
+            field.name: round(getattr(self, field.name), _PRECISION[field.name])
+            for field in fields(self)
+            if field.name != "flags"
+        }
 
 
 def measure(audio: NormalizedAudio, config: QualityConfig) -> QualityMetrics:

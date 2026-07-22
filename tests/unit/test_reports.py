@@ -8,6 +8,7 @@ noise.
 """
 
 import json
+from dataclasses import fields
 from pathlib import Path
 
 from sdw.config import Config, ManifestConfig, QualityConfig, SplitConfig
@@ -16,7 +17,6 @@ from sdw.manifest import build_dataset
 from sdw.quality import QualityMetrics
 from sdw.reports import (
     QUALITY_JSONL,
-    QUALITY_KEYS,
     SUMMARY_TXT,
     _join,
     _overlap_note,
@@ -77,8 +77,42 @@ class TestQualityJsonl:
         assert [line["id"] for line in lines] == ["rec_a", "rec_b"]
 
     def test_key_order_is_fixed_not_insertion_dependent(self) -> None:
+        """The nine keys, spelled out — the promise a golden would silently re-baseline.
+
+        Written literally rather than derived from the renderer's own field walk, because an
+        expectation computed from the code under test cannot fail. `id` leads and `flags` trails
+        around the seven metrics (ADR-0007); the metrics themselves follow
+        :class:`~sdw.quality.QualityMetrics`' declaration order, so a reorder there — a change that
+        looks purely cosmetic — fails here by name.
+        """
         text = render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0]
-        assert list(json.loads(text).keys()) == list(QUALITY_KEYS)
+        assert list(json.loads(text).keys()) == [
+            "id",
+            "duration_s",
+            "peak_dbfs",
+            "clip_ratio",
+            "active_rms_dbfs",
+            "leading_silence_s",
+            "trailing_silence_s",
+            "silence_ratio",
+            "flags",
+        ]
+
+    def test_every_metric_reaches_the_report(self) -> None:
+        """The line's metrics are exactly the numeric fields of `QualityMetrics` (#68).
+
+        The file is the *record* of what was measured, so a metric the tool measures and does not
+        write is a gap no golden can catch — the missing bytes were never there to change. Derived
+        from the dataclass rather than listed, so an eighth metric is covered the day it is added,
+        whatever the reason it might otherwise have been dropped.
+
+        Equality rather than a subset, so the file is also barred from growing a numeric key that no
+        metric backs. `id` and `flags` are excluded on both sides: they frame the metrics rather
+        than being any of them.
+        """
+        declared = {field.name for field in fields(QualityMetrics)} - {"flags"}
+        line = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
+        assert declared == set(line) - {"id", "flags"}
 
     def test_clean_recording_has_an_empty_flags_array(self) -> None:
         line = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])

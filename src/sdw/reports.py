@@ -33,36 +33,13 @@ Four facts pin the shape:
 from collections.abc import Sequence
 from pathlib import Path
 
-from sdw.quality import DBFS_DP, RATIO_DP, SECONDS_DP, QualityMetrics, render_digest
+from sdw.quality import QualityMetrics, render_digest
 from sdw.serialization import render_jsonl
 from sdw.split import MIN_SESSIONS_FOR_REPAIR, SPLIT_ORDER, SpeakerOverlap, SplitResult
 
 REPORTS_DIR = "reports"
 QUALITY_JSONL = "quality.jsonl"
 SUMMARY_TXT = "summary.txt"
-
-# Decimal places per field *type*, not per field (ADR-0007). Imported from :mod:`sdw.quality`
-# rather than restated, because the digest and this file round the same full-precision numbers and
-# a drift between them would put two different values for one metric in one build. Rounding at
-# render is what lets the file be an exact golden — two runs that agree to within a float ULP still
-# serialize identically, so no test needs a tolerance.
-
-# The line's numeric fields: key order *and* precision in one table, because they are one decision.
-# Two parallel structures would let a key exist with no precision beside it, and that mismatch would
-# surface as a KeyError at render time rather than as an obviously incomplete edit here. `id` leads
-# and `flags` trails around them — the file is sorted by `id` and joined on it, and `flags` is the
-# only variable-length field (ADR-0007).
-_METRIC_FIELDS = (
-    ("duration_s", SECONDS_DP),
-    ("peak_dbfs", DBFS_DP),
-    ("clip_ratio", RATIO_DP),
-    ("active_rms_dbfs", DBFS_DP),
-    ("leading_silence_s", SECONDS_DP),
-    ("trailing_silence_s", SECONDS_DP),
-    ("silence_ratio", RATIO_DP),
-)
-
-QUALITY_KEYS = ("id", *(key for key, _ in _METRIC_FIELDS), "flags")
 
 
 def write_reports(
@@ -102,18 +79,21 @@ def render_quality_jsonl(results: Sequence[tuple[str, QualityMetrics]]) -> str:
 
 
 def _line(recording_id: str, metrics: QualityMetrics) -> dict[str, object]:
-    """One Recording's line, rounded per field type, in :data:`QUALITY_KEYS` order.
+    """One Recording's line: the `id`, the metrics as they round, then the flags.
 
-    ``round`` rather than fixed-decimal string formatting, because JSON has no notion of trailing
-    zeros to preserve and a numeric literal keeps the field a number for any consumer that parses
-    it. The human digest formats to fixed width for a different reason — column alignment — which
-    is why the two renderings differ.
+    The metric names and their precisions are :class:`~sdw.quality.QualityMetrics`' own business —
+    this module used to restate all seven beside a precision each, which made it, not the dataclass,
+    the thing that decided which metrics reached the record. An eighth metric was then measured,
+    digested, and silently missing from the file (#68).
+
+    `id` leads and `flags` trails around them: the file is sorted by `id` and joined on it, and
+    `flags` is the only variable-length field (ADR-0007).
     """
-    line: dict[str, object] = {"id": recording_id}
-    for key, places in _METRIC_FIELDS:
-        line[key] = round(getattr(metrics, key), places)
-    line["flags"] = list(metrics.flags)
-    return line
+    return {
+        "id": recording_id,
+        **metrics.rounded(),
+        "flags": list(metrics.flags),
+    }
 
 
 # --- The human summary ---------------------------------------------------------------------------
