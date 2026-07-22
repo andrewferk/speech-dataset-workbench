@@ -91,14 +91,18 @@ class SplitResult:
     configures 80-10-10 and receives 50-25-25 is looking at arithmetic — whole Sessions are
     indivisible — and both numbers being present lets them draw that conclusion themselves.
 
-    **A field belongs here if a caller reads it, or if it is read and its derivation encodes a
-    decision this module owns** (#70). Per-Split Session counts, per-Split deficits, and the set
-    of empty Splits were all once fields and are none of them now: each is arithmetic over a field
-    still published here — a count over ``assignments``, ``targets`` less ``samples``, a
-    ``samples`` count of zero — and the arithmetic carries no decision, so a caller that wants one
-    can do it. ``below_min_sessions`` stays under the second clause: the
-    :data:`MIN_SESSIONS_FOR_REPAIR` comparison is this module's rule about when it makes the
-    non-emptiness promise, and #10 re-deriving it would put that judgement in the renderer.
+    **A field earns its place here if a production caller reads it, or if it is read and its
+    derivation encodes a decision this module owns** (#70). *Production* is load-bearing: a test is
+    a caller too, and all three fields removed by #70 had a test reading them. Being read by the
+    suite is what makes a field look alive, not what earns it.
+
+    Per-Split Session counts, per-Split deficits, and the set of empty Splits were all once fields
+    and are none of them now: each is arithmetic over a field still published here — a count over
+    ``assignments``, ``targets`` less ``samples``, a ``samples`` count of zero — and the arithmetic
+    carries no decision, so a caller that wants one can do it. ``below_min_sessions`` stays under
+    the second clause: the :data:`MIN_SESSIONS_FOR_REPAIR` comparison is this module's rule about
+    when it makes the non-emptiness promise, and #10 re-deriving it would put that judgement in the
+    renderer.
 
     There is deliberately no companion flag for an empty Split at or above
     :data:`MIN_SESSIONS_FOR_REPAIR` Sessions — the "repair failed to buy a promise the tool made"
