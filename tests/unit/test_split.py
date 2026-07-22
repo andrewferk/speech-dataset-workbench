@@ -77,8 +77,13 @@ def _deficits(result: SplitResult) -> dict[str, float]:
     return {name: result.targets[name] - result.samples[name] for name in SPLIT_ORDER}
 
 
-def _sessions_per_split(result: SplitResult) -> dict[str, int]:
-    """Sessions per Split — what :data:`~sdw.split.MIN_DONOR_SESSIONS` is measured against."""
+def _session_counts(result: SplitResult) -> dict[str, int]:
+    """Sessions per Split, counted from ``assignments`` — the unit the partition moves in.
+
+    Deliberately not the module's own private of the same job: these tests assert what a caller
+    can see, and a caller sees ``assignments``. Recomputing here rather than importing keeps the
+    test honest about what the interface publishes (#70).
+    """
     counts = Counter(result.assignments.values())
     return {name: counts[name] for name in SPLIT_ORDER}
 
@@ -189,7 +194,7 @@ class TestTheRepair:
         result = split_sessions(_recordings({f"sess_{i:02d}": 3 for i in range(4)}), DEFAULTS)
 
         assert result.samples == {"train": 6, "val": 3, "test": 3}
-        assert _sessions_per_split(result) == {"train": 2, "val": 1, "test": 1}
+        assert _session_counts(result) == {"train": 2, "val": 1, "test": 1}
         assert result.moves == (
             RepairMove(session_id=result.order[0], donor="train", recipient="test"),
         )
@@ -199,7 +204,7 @@ class TestTheRepair:
         # Session, so donating it would merely relocate the emptiness.
         result = split_sessions(_recordings({f"sess_{i:02d}": 3 for i in range(4)}), DEFAULTS)
         (move,) = result.moves
-        sessions = _sessions_per_split(result)
+        sessions = _session_counts(result)
 
         # Pre-move state, reconstructed: water-filling left train 3, val 1, test 0. val carries the
         # largest surplus and is skipped for holding one Session; train donates.
@@ -258,7 +263,7 @@ class TestFewerThanThreeSessions:
         assert not all(result.samples[name] for name in SPLIT_ORDER)
         assert result.samples["train"]
 
-    def test_one_session_fills_train_and_flags_val_and_test_empty(self) -> None:
+    def test_one_session_fills_train_and_leaves_val_and_test_empty(self) -> None:
         result = split_sessions(_recordings({"sess_01": 4}), DEFAULTS)
 
         assert result.assignments == {"sess_01": "train"}
