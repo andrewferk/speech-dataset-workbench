@@ -152,6 +152,44 @@ tests/
   demo data from `tests/fixtures/reference/` (see Rejected alternatives) still stands: only the
   *generator* is shared, not the fixtures.
 
+- **The `--data-out` tree's names are pinned by literals; consistency assertions may use constants
+  (added by #66).** Two different claims get made about the committed tree, and only one of them may
+  import the writer's layout constants.
+
+  **Contract-pinning assertions spell paths literally and must stay that way.** ADR-0003's tree is
+  *published*: consumers outside this repo read it, and `datasets` finds `audio/<split>/metadata.jsonl`
+  by convention. Renaming `audio/` to `data/` is a breaking change and must turn the suite red. The
+  literal is the specification, not duplication. Two distinct mechanisms pin it, and it is worth
+  being precise about which does what:
+
+  - **Committed golden *bytes*.** `train/val/test.jsonl` carry `"audio_filepath":"audio/<split>/…"`
+    inside them, so renaming `audio/` fails the byte comparison. `STABLE_ARTIFACTS` in the golden
+    e2e pins the *filenames* `dataset.json`, `reports/quality.jsonl`, `reports/summary.txt` — it
+    contains no `audio/` entry, so it is the goldens' content, not that list, that guards the audio
+    subtree.
+  - **Literal assertions in tests.** The Manifest's own `audio_filepath` and HF-metadata-key tests
+    (`test_manifest.py`), the committed-tree shape assertions after a `build` (`test_pipeline_commit.py`,
+    `test_pipeline_images.py`), and the worked-example e2e (`test_example_build.py`).
+
+  Consolidating any of these into shared constants would disarm the assertion while leaving it
+  green — the failure mode this note exists to prevent.
+
+  **Consistency assertions may import `manifest.AUDIO_DIR`, `images.IMAGES_DIR`,
+  `reports.REPORTS_DIR`, `provenance.DESCRIPTOR_NAME`, or `manifest.audio_path`, and often should.**
+  Their claim is that two modules agree — that `staging` places a WAV where the Manifest's
+  `audio_filepath` points, that the reports land where `reports` says. Naming the shared constant is
+  what makes "they agree" the thing under test; a literal there would restate the contract a third
+  time without strengthening it.
+
+  **The test to apply:** would this assertion still pass if `audio/` were renamed to `data/`
+  everywhere? If yes it is a consistency assertion and a constant is fine — but something else must
+  be pinning the name, and that something is the literal set above. Never let the literal set shrink
+  to nothing.
+
+  This is also why ADR-0003 rejects a dedicated layout module: the contract-pinning assertions cannot
+  be its second consumer without giving up what they are for. The rule is scoped to the `--data-out`
+  tree — it says nothing about constants used for *inputs* or test-local scratch paths.
+
 ## Rejected alternatives
 
 - **Pure committed WAV corpus (no synth)** — rejected; opaque binaries drift into magic files, can't

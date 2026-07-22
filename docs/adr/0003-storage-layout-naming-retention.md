@@ -137,4 +137,17 @@ Retention is a consequence of the stateless in→out shape (ADR-0002), not a sep
   `.tmp` is cleaner.
 - **Keeping the previous build as `.old`** — contradicts single-current-build; `.old` is deleted
   after a successful swap.
-```
+- **A dedicated layout module** (added by #66, deciding #64) — a leaf module owning the composition
+  of every path under the staging root, so that this ADR's tree maps one-to-one onto one file. It
+  has exactly one production consumer: `staging` evaluates those paths, and nothing else does. The
+  tests do import the leaf modules' subtree constants where they assert that two modules *agree*,
+  but the assertions that pin this ADR's tree spell it literally on purpose and must keep doing so
+  (ADR-0008), so they are not a consumer a layout module could serve. Deleting it would move four
+  path expressions back into the only code that evaluates them: complexity relocated, not
+  concentrated. The cost is paid either way — four names one hop further from their use — with no
+  second implementation, no test double, and no independent variation bought in return. `staging`
+  composes all four inside one class instead, while each leaf module keeps owning its own subtree
+  name. **Reopen if either trigger fires:** a command that *reads* a built `--data-out` back (a
+  verify, an incremental rebuild, a publish step), which makes writing and reading two consumers
+  that must agree and a mismatch a silent wrong-path bug; or the tree shape becoming configurable,
+  which this ADR currently forbids.
