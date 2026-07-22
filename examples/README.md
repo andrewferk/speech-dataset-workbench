@@ -10,9 +10,10 @@
 
 ## Run it — one command, no downloads
 
-The tree is committed, so there is nothing to fetch and nothing to record. After the one-time setup
-from the [top-level README](../README.md) (`uv sync`, which installs the `sdw` command into
-`.venv`), run this from the repo root:
+The tree is committed, so there is nothing to fetch and nothing to record. This demo needs the
+clone install — follow [Install](../README.md#install) in the top-level README to clone the repo and
+run `uv sync`, which puts the `sdw` command in `.venv`. The standalone `uv tool install` path does
+not package this example tree, so there is nothing to run there. Then, from the repo root:
 
 ```bash
 sdw build --data-in examples/data-in --data-out /tmp/example-out
