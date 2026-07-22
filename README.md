@@ -38,7 +38,7 @@ session-a/take-01.wav,spk_ak,ses_a,"Hello, how are you?",shure-sm7b,quiet-room
 
 `path` is a POSIX path relative to the `--data-in` root; absolute paths and `..`-escapes are
 rejected. Files not referenced by the CSV are silently ignored. The full contract — every column,
-every rejection, and how byte-identical recordings collapse — is in
+every way a row aborts the build, and how byte-identical Originals collapse — is in
 [`docs/usage.md`](docs/usage.md).
 
 The tool manages **no state of its own**. A build is a pure function of `--data-in` plus the
@@ -151,9 +151,10 @@ The scope was narrowed hard, and these exclusions are design boundaries, not gap
 
 - **No model ever runs.** No Whisper, no ASR baseline, no WER/CER. Nothing in the stack does
   inference.
-- **No perceived-transcript collection and no annotation UI.** The tool stores *intended text* (the
-  prompt). Every manifest line carries a `perceived_text` key and its value is always `null` — the
-  dual-annotation slot is named in the schema, and nothing collects it.
+- **No perceived-text collection and no annotation UI.** The tool stores *intended text* (the
+  prompt). Every manifest line carries a `perceived_text` key — what a listener judges was actually
+  said — and its value is always `null`: the dual-annotation slot is named in the schema, and
+  nothing collects it.
 - **No web UI.** CLI only; visualization is emitted as PNG files.
 - **No DVC / experiment tracking.** Reproducibility is intrinsic — content hashes, a deterministic
   pipeline, and the manifest.
