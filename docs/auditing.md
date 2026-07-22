@@ -43,8 +43,13 @@ preimage above hashes — the **Manifest, the effective config, and the tool ver
 Normalized audio bytes, which derive from resampled floats that
 [ADR-0005](adr/0005-input-formats-and-normalization-target.md) establishes are not cross-arch
 bit-exact, so an id covering them could not be stable across machines at all. Audio is covered
-instead through each Sample's `content_hash` of the Original, a hash of bytes at rest. Checking the
-WAVs in `audio/` means checking those hashes, which the recipe does not do.
+instead through each Sample's `content_hash` — a `sha256` of the **Original**, bytes at rest and so
+byte-exact on every machine.
+
+That coverage is inherited, not recomputable here. The Originals live in `--data-in`, which this
+recipe deliberately does not need, so nothing in a `--data-out` tree can recompute a `content_hash`;
+and the **Normalized** WAVs under `audio/` are hashed by nothing at all. Verifying audio bytes means
+going back to the inputs, and this recipe never touches them.
 
 `dataset.json`'s `hashing.dataset_version` field carries a one-line summary of this same recipe, so
 the artifact explains its own id standalone — a reader holding only the tree learns what the id
