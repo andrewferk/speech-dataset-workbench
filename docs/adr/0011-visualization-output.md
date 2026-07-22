@@ -175,9 +175,9 @@ flag is a category error in that field.
 Two lines in *Consequences* justify their claims with an ordering the shipped code does not have:
 
 > - **`validate` renders nothing.** #8 defines it as stages 1–4, read-only, stdout only; images are
->   stage 5.
-
-> Consistent with #8's `normalize → validate → split → manifest → images → report`.
+>   stage 5. […]
+> - **Pipeline ordering constraint for implementation:** […] Consistent with #8's
+>   `normalize → validate → split → manifest → images → report`.
 
 That list is **historical** — #8's planning-time sketch, not the built pipeline. As built
 (`src/sdw/pipeline.py`, `src/sdw/staging.py`), the order is:
