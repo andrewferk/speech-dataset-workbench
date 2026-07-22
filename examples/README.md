@@ -113,9 +113,9 @@ flag.
 ### Preflight without writing anything
 
 `validate` runs the same checking engine read-only (it writes nothing, anywhere) and prints just the
-Quality digest — the first block above. It exits `0` if and only if a subsequent `build` on the same
-input will not hit a hard error, so it is a trustworthy CI gate. A merely-flagged Recording still
-exits `0`:
+Quality digest — the first block above. It exits `0` if and only if a subsequent `build` would clear
+every check that reads `--data-in` or `--config`, so it is a trustworthy CI gate for the input. A
+merely-flagged Recording still exits `0`:
 
 ```bash
 sdw validate --data-in examples/data-in
@@ -143,7 +143,8 @@ To point the tool at your own recordings:
    ```bash
    sdw validate --data-in ~/my-recordings
    ```
-   A green preflight means `build` will not hard-error. Then build for real:
+   A green preflight means `build` will not hard-error on your input or your config. Then build for
+   real:
    ```bash
    sdw build --data-in ~/my-recordings --data-out ~/my-dataset
    ```

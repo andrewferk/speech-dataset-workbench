@@ -7,8 +7,8 @@ immutable :class:`Config`. Two facts about it are load-bearing:
 - **Ratio validation lives here, not in the splitter.** ADR-0007 stops ``validate`` at the
   quality stage, while splitting is later; if an illegal ratio were only caught in the splitter,
   ``validate`` could never catch it and the spec's guarantee — a green preflight means ``build``
-  will not hard-error — would be false. So :func:`load_config` runs on both commands and rejects
-  a bad ratio up front.
+  will not hard-error on anything derivable from ``--data-in`` or ``--config`` — would be false.
+  So :func:`load_config` runs on both commands and rejects a bad ratio up front.
 - **The config serializes exactly once**, via :meth:`Config.canonical_json`. Those bytes feed
   both the ``dataset_version`` preimage (ADR-0010) and ``dataset.json``'s ``config`` block, so
   the two cannot drift. :meth:`Config.canonical_dict` exposes the same structure for a consumer

@@ -132,9 +132,9 @@ class TestDecodeGate:
     """An undecodable Original aborts *both* commands (#25, ADR-0005).
 
     Normalization is where ADR-0005's ingest gate actually fires, and it runs in `validate` too:
-    a green `validate` promises `build` will not hit a hard error, so both must abort on the same
-    input. The abort leaves no durable output — a Dataset Version always stands for the whole
-    intended input, never a silent subset.
+    a green `validate` promises `build` will not hit a hard error on anything derivable from
+    `--data-in` or `--config`, so both must abort on the same input. The abort leaves no durable
+    output — a Dataset Version always stands for the whole intended input, never a silent subset.
     """
 
     # Every input ADR-0005 names as a structural failure, against both commands.
