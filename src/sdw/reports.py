@@ -122,9 +122,10 @@ def _min_sessions_warning(split_result: SplitResult) -> tuple[str, ...]:
     """The unmissable warning for a Dataset below :data:`~sdw.split.MIN_SESSIONS_FOR_REPAIR`.
 
     Produce-and-flag: a three-way split of two Sessions is arithmetically impossible, so the build
-    assigns what it can, emits valid empty Splits, and says so — it never aborts (ADR-0004). Empty
-    Splits at or above three Sessions would be a different warning about a different thing (a repair
-    that failed to buy a promise the tool made), and this one does not claim to cover it.
+    assigns what it can, emits valid empty Splits, and says so — it never aborts (ADR-0004). There
+    is no companion warning for an empty Split at or above that count: ADR-0004's pigeonhole
+    argument proves an eligible donor always exists there, so this is the only split warning a build
+    can emit (#70).
     """
     if not split_result.below_min_sessions:
         return ()

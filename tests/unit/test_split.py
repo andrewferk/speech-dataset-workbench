@@ -6,17 +6,30 @@ the four rules that make the split a promise rather than a hope: the Session is 
 targets are computed once against a known ``N``, the order and the tie-breaks are total, and the
 repair is the least-cost move that buys non-emptiness.
 
-The disclosures are asserted as *data* — a move list, an overlap finding, an emptiness flag.
+The disclosures are asserted as *data* — a move list, an overlap finding, a below-minimum flag.
 Rendering them is `summary.txt`'s job (#10), so nothing here asserts prose.
+
+Everything is asserted through the interface a caller sees. Where a fact is a derivation over two
+fields — the deficit is ``targets`` minus ``samples``, emptiness is a ``samples`` count of zero,
+Sessions per Split is a count over ``assignments`` — the test states the derivation rather than
+reading a precomputed field, because that is the relationship ADR-0004 actually specifies (#70).
 """
 
 import hashlib
+from collections import Counter
 
 import pytest
 
 from sdw.config import SplitConfig
 from sdw.ingest import Recording
-from sdw.split import SPLIT_ORDER, RepairMove, _donor_split, _repair, split_sessions
+from sdw.split import (
+    SPLIT_ORDER,
+    RepairMove,
+    SplitResult,
+    _donor_split,
+    _repair,
+    split_sessions,
+)
 
 DEFAULTS = SplitConfig()
 
@@ -53,6 +66,26 @@ def _hash_order(session_ids: list[str], seed: int = DEFAULTS.seed) -> list[str]:
         session_ids,
         key=lambda sid: hashlib.sha256(f"{seed}:{sid}".encode()).hexdigest(),
     )
+
+
+def _deficits(result: SplitResult) -> dict[str, float]:
+    """The realized deficit per Split: the configured target less what the Split actually got.
+
+    ADR-0004 defines the deficit as exactly this subtraction over two fields the interface
+    publishes, so the tests do it rather than reading a third field that restates it (#70).
+    """
+    return {name: result.targets[name] - result.samples[name] for name in SPLIT_ORDER}
+
+
+def _session_counts(result: SplitResult) -> dict[str, int]:
+    """Sessions per Split, counted from ``assignments`` — the unit the partition moves in.
+
+    Deliberately not the module's own private of the same job: these tests assert what a caller
+    can see, and a caller sees ``assignments``. Recomputing here rather than importing keeps the
+    test honest about what the interface publishes (#70).
+    """
+    counts = Counter(result.assignments.values())
+    return {name: counts[name] for name in SPLIT_ORDER}
 
 
 class TestGrouping:
@@ -93,14 +126,15 @@ class TestTargetsAndDeficits:
         # One 10-Sample Session cannot fit val's 1.2-Sample target, so whichever split takes it
         # overshoots — the deficit must record that as a negative float, not clamp at zero.
         result = split_sessions(_recordings({"sess_01": 10, "sess_02": 1, "sess_03": 1}), DEFAULTS)
+        deficits = _deficits(result)
 
-        assert any(deficit < 0 for deficit in result.deficits.values())
-        assert all(isinstance(deficit, float) for deficit in result.deficits.values())
+        assert any(deficit < 0 for deficit in deficits.values())
+        assert all(isinstance(deficit, float) for deficit in deficits.values())
 
     def test_deficits_are_never_rounded(self) -> None:
         result = split_sessions(_recordings({"sess_01": 1, "sess_02": 1, "sess_03": 1}), DEFAULTS)
 
-        assert result.deficits["train"] == pytest.approx(0.8 * 3 - result.samples["train"])
+        assert _deficits(result)["train"] == pytest.approx(0.8 * 3 - result.samples["train"])
 
 
 class TestOrderAndTieBreaks:
@@ -160,23 +194,23 @@ class TestTheRepair:
         result = split_sessions(_recordings({f"sess_{i:02d}": 3 for i in range(4)}), DEFAULTS)
 
         assert result.samples == {"train": 6, "val": 3, "test": 3}
-        assert result.sessions == {"train": 2, "val": 1, "test": 1}
+        assert _session_counts(result) == {"train": 2, "val": 1, "test": 1}
         assert result.moves == (
             RepairMove(session_id=result.order[0], donor="train", recipient="test"),
         )
-        assert result.empty_splits == ()
 
     def test_the_donor_holds_at_least_two_sessions(self) -> None:
         # The worked example's load-bearing filter: val has the largest surplus but exactly one
         # Session, so donating it would merely relocate the emptiness.
         result = split_sessions(_recordings({f"sess_{i:02d}": 3 for i in range(4)}), DEFAULTS)
         (move,) = result.moves
+        sessions = _session_counts(result)
 
         # Pre-move state, reconstructed: water-filling left train 3, val 1, test 0. val carries the
         # largest surplus and is skipped for holding one Session; train donates.
         assert move.donor == "train"
-        assert result.sessions["train"] + 1 == 3
-        assert result.sessions["val"] == 1
+        assert sessions["train"] + 1 == 3
+        assert sessions["val"] == 1
 
     def test_the_moved_session_is_the_donor_s_smallest(self) -> None:
         # train ends up holding a 1-Sample and a 9-Sample Session; the repair must cost one Sample,
@@ -191,7 +225,7 @@ class TestTheRepair:
         result = split_sessions(_recordings({f"sess_{i:02d}": 1 for i in range(10)}), DEFAULTS)
 
         assert result.moves == ()
-        assert result.empty_splits == ()
+        assert all(result.samples[name] for name in SPLIT_ORDER)
 
     def test_repair_never_runs_below_three_sessions(self) -> None:
         result = split_sessions(_recordings({"sess_01": 5, "sess_02": 5}), DEFAULTS)
@@ -226,19 +260,20 @@ class TestFewerThanThreeSessions:
         result = split_sessions(_recordings({"sess_01": 3, "sess_02": 3}), DEFAULTS)
 
         assert result.samples["train"] + result.samples["val"] + result.samples["test"] == 6
-        assert result.empty_splits != ()
-        assert set(result.empty_splits) <= {"val", "test"}
+        assert not all(result.samples[name] for name in SPLIT_ORDER)
+        assert result.samples["train"]
 
-    def test_one_session_fills_train_and_flags_val_and_test_empty(self) -> None:
+    def test_one_session_fills_train_and_leaves_val_and_test_empty(self) -> None:
         result = split_sessions(_recordings({"sess_01": 4}), DEFAULTS)
 
         assert result.assignments == {"sess_01": "train"}
-        assert result.empty_splits == ("val", "test")
+        assert result.samples == {"train": 4, "val": 0, "test": 0}
 
-    def test_the_below_min_sessions_flag_separates_impossible_from_failed(self) -> None:
-        # Two facts, two warnings (#10): below three Sessions a three-way split was never
-        # available, while an empty Split above three would mean the repair failed to buy a
-        # promise the tool made. One flag could not tell the operator which happened.
+    def test_the_below_min_sessions_flag_is_the_one_split_warning(self) -> None:
+        # The flag says a three-way split was never arithmetically available — the only split
+        # warning `summary.txt` emits. There is deliberately no companion flag for an empty Split
+        # at three or more Sessions: ADR-0004's pigeonhole argument proves that state unreachable,
+        # so the warning would be prose no build can emit (#70).
         two_sessions = _recordings({"sess_01": 3, "sess_02": 3})
 
         assert split_sessions(two_sessions, DEFAULTS).below_min_sessions
@@ -251,7 +286,7 @@ class TestFewerThanThreeSessions:
 
         assert result.total_samples == 0
         assert result.assignments == {}
-        assert result.empty_splits == SPLIT_ORDER
+        assert result.samples == dict.fromkeys(SPLIT_ORDER, 0)
 
 
 class TestSpeakerOverlapDisclosure:
