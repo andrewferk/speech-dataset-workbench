@@ -6,8 +6,8 @@ audit need a single user does not have. That call stands, and it makes the recip
 documentation**: the property is demonstrated nowhere but in prose, and prose nothing runs is prose
 that is wrong within two releases.
 
-This module runs the documented recipe (README, "Auditing a build — recomputing `dataset_version`")
-against a committed `--data-out` and compares the result to the recorded id.
+This module runs the documented recipe (`docs/auditing.md`) against a committed `--data-out` and
+compares the result to the recorded id.
 
 **It imports nothing from `src/`.** That constraint is the entire point. A test sharing the tool's
 hashing code computes ``f(x) == f(x)`` and passes forever — including when `f` is wrong, and
@@ -17,11 +17,12 @@ re-spelled from its documented steps — the domain separator, the framing, the 
 here — and checks the **documentation against the tool**, not the tool against itself.
 
 Its failure mode is a feature. When it fails, it is genuinely ambiguous whether `src/` or the
-README is wrong, which forces a human to decide rather than auto-update a golden. That is the
+document is wrong, which forces a human to decide rather than auto-update a golden. That is the
 correct failure mode for a provenance claim. In particular, a preimage change in `src/` that
 regenerates the committed golden (`UPDATE_GOLDEN`) moves the recorded id but **not** this
-independent recipe — so this test goes red until the README and this file are brought back into
-step. That coupling — recipe prose and this test edited together — is the mechanism ADR-0012 names.
+independent recipe — so this test goes red until `docs/auditing.md` and this file are brought back
+into step. That coupling — recipe prose and this test edited together — is the mechanism ADR-0012
+names.
 
 The audited tree is the committed reference golden (`tests/fixtures/reference/golden/`): a real,
 static `--data-out` snapshot, so the audit needs no build step and therefore no `src/` at all.
@@ -51,8 +52,7 @@ SPLIT_ORDER = ("train", "val", "test")
 def _recompute_dataset_version(data_out: Path) -> str:
     """Recompute `dataset_version` from a `--data-out` alone, following the documented recipe.
 
-    The literal steps from the README's "Auditing a build" recipe, reimplemented here with no
-    reference to `src/`:
+    The literal steps from `docs/auditing.md`, reimplemented here with no reference to `src/`:
 
     1. Read `tool_version` and the `config` block from `dataset.json`.
     2. Re-serialize `config` canonically — keys sorted, compact separators, UTF-8 — reproducing the
@@ -82,7 +82,7 @@ def _recompute_dataset_version(data_out: Path) -> str:
 
 def test_recipe_reproduces_the_recorded_dataset_version() -> None:
     # The audit's whole claim: the id independently recomputed from `--data-out` equals the id the
-    # tool recorded. A mismatch means the README recipe and the tool have diverged — decide which.
+    # tool recorded. A mismatch means `docs/auditing.md` and the tool have diverged — decide which.
     recorded = json.loads((GOLDEN_DIR / "dataset.json").read_text(encoding="utf-8"))[
         "dataset_version"
     ]
