@@ -117,18 +117,27 @@ class QualityMetrics:
     def rounded(self) -> dict[str, float]:
         """The numeric metrics at ADR-0007 precision, keyed by name in declaration order.
 
-        The rendering `quality.jsonl` is built from (#68). Rounded here rather than at measurement
-        so the full-precision floats stay available to the digest and the image titles, which round
-        the same numbers once each rather than rounding an already-rounded number twice.
+        The rendering `quality.jsonl` is built from (#68). Rounded here rather than at measurement,
+        so the full-precision floats stay on the dataclass for the digest and the image titles to
+        format to their own widths — each rendering derives from the measured number rather than
+        from another rendering's already-rounded one.
+
+        Rounding at render is also what lets the file be an exact golden: two runs that agree to
+        within a float ULP still serialize identically, so ADR-0008's comparison needs no tolerance
+        machinery.
 
         ``round`` rather than fixed-decimal strings, because these stay JSON numbers for a consumer
         that parses them — the human-facing renderings format for column width, which is a decision
-        about the artifact and stays with the artifact.
+        about the artifact and stays with the artifact. That split is deliberate and was the thing
+        weighed when this method was designed: a `format(field)` here would have to decide the unit
+        suffix, the separator and the column width too, which is most of what the four call sites
+        differ on. Precision is a decision about the metric; spelling is a decision about the
+        artifact (#54, #68).
 
         Declaration order *is* the key order of a `quality.jsonl` line. That makes reordering the
         fields above an output change; ``test_key_order_is_fixed_not_insertion_dependent`` is what
-        says so out loud, since the reports are excluded from `dataset_version` (ADR-0005) and so a
-        reorder cannot be caught by a version mismatch.
+        says so out loud, since the reports are deliberately excluded from `dataset_version`
+        (ADR-0010) and so a reorder cannot be caught by a version mismatch.
         """
         return {
             field.name: round(getattr(self, field.name), _PRECISION[field.name])

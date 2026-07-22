@@ -99,16 +99,20 @@ class TestQualityJsonl:
         ]
 
     def test_every_metric_reaches_the_report(self) -> None:
-        """Every numeric field of :class:`~sdw.quality.QualityMetrics` appears in the line (#68).
+        """The line's metrics are exactly the numeric fields of `QualityMetrics` (#68).
 
         The file is the *record* of what was measured, so a metric the tool measures and does not
         write is a gap no golden can catch — the missing bytes were never there to change. Derived
         from the dataclass rather than listed, so an eighth metric is covered the day it is added,
         whatever the reason it might otherwise have been dropped.
+
+        Equality rather than a subset, so the file is also barred from growing a numeric key that no
+        metric backs. `id` and `flags` are excluded on both sides: they frame the metrics rather
+        than being any of them.
         """
-        rendered = {field.name for field in fields(QualityMetrics)} - {"flags"}
+        declared = {field.name for field in fields(QualityMetrics)} - {"flags"}
         line = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
-        assert rendered <= set(line)
+        assert declared == set(line) - {"id", "flags"}
 
     def test_clean_recording_has_an_empty_flags_array(self) -> None:
         line = json.loads(render_quality_jsonl([("rec_a", _metrics())]).splitlines()[0])
