@@ -1,30 +1,15 @@
 """The `--data-out` tree while it is being built: what lands in it, and where (#64, ADR-0003).
 
 :mod:`sdw.commit` owns *when* a tree becomes the Dataset — the `.tmp`/`.old` protocol, the sentinel
-written last, the atomic swap. This module owns *what goes into* one, and it is `commit`'s only
-caller. The two secrets are separable and fail for different reasons, so they stay separate: a
-placement bug and a swap bug have different tests and different fixes.
+written last, the atomic swap. This module owns *what goes into* one, and is `commit`'s only caller.
+Two invariants that used to be caller discipline are properties of the interface's shape:
 
-Three names are the whole interface. :func:`open` is a context manager that prepares the staging and
-discards it on any exception; :meth:`StagedTree.add` takes one Recording with its Normalized audio
-and its metrics as the decode loop produces them; :meth:`StagedTree.finish` turns everything added
-into the committed Dataset. Two invariants that used to be caller discipline are properties of that
-shape:
-
-- **An abort discards the staging.** It is the context manager's exit, not a `try`/`except` a caller
-  could forget or reorder, and it catches `BaseException` so an interrupt is no different from a
-  hard error. `finish` runs *inside* the scope, so a failure during the swap discards too.
-
-- **The splitter runs on the fixed surviving set.** ADR-0004 requires that every Recording has
-  survived normalization and validation before any Session is placed. This module holds every
-  Recording handed to `add`, and `finish` is the only thing that splits, so splitting early is not
-  an ordering mistake a reader has to notice — it is not expressible.
-
-Rendering and writing happen here rather than being handed in finished, because a version of this
-module that only vended destination paths would have an interface as wide as its implementation.
-Each leaf module still owns its own subtree name (:data:`~sdw.images.IMAGES_DIR`,
-:data:`~sdw.reports.REPORTS_DIR`, :data:`~sdw.manifest.AUDIO_DIR`); this is the one place those
-names become paths under the staging root.
+- **An abort discards the staging.** It is the context manager's exit, catching `BaseException` so
+  an interrupt is no different from a hard error; `finish` runs inside the scope, so a failure
+  during the swap discards too.
+- **The splitter runs on the fixed surviving set.** `finish` is the only thing that splits and it
+  sees every Recording handed to `add`, so splitting early is not an ordering mistake a reader has
+  to catch — it is not expressible (ADR-0004).
 """
 
 from collections.abc import Iterator
@@ -43,10 +28,9 @@ from sdw.quality import QualityMetrics
 class _StagedRecording:
     """One added Recording: itself, what it measured, and where its WAV currently sits.
 
-    The three maps keyed by `recording_id` that the pipeline used to thread — metrics for the
-    reports, durations for the Manifest, flat WAV paths for the placement — collapsed into one
-    record. Private on purpose: exporting it would re-export the problem, and a fourth per-Recording
-    fact is a field here rather than a fourth map somewhere else.
+    Private on purpose: the three per-`recording_id` maps the pipeline used to thread (metrics,
+    durations, flat WAV paths) collapsed into one record, and a fourth per-Recording fact is a field
+    here rather than a fourth map somewhere else.
     """
 
     recording: Recording
@@ -67,12 +51,12 @@ class StagedTree:
         self._staged: list[_StagedRecording] = []
 
     def add(self, recording: Recording, audio: NormalizedAudio, metrics: QualityMetrics) -> None:
-        """Render ``recording``'s Images and write its WAV, retaining what :meth:`finish` needs.
+        """Render ``recording``'s Images and write its WAV now, retaining what :meth:`finish` needs.
 
-        Called once per Recording with the audio still in hand, because it is the only moment it is:
-        a Dataset's worth of float64 does not fit in memory, so the WAV is written now — flat under
-        `audio/`, since no Session has a Split yet — and moved into its bucket by :meth:`finish`.
-        The metrics are retained instead: they are the report lines and each Sample's `duration`.
+        Called once per Recording while its audio is in hand — a Dataset's worth of float64 does not
+        fit in memory. The WAV is written flat under `audio/` (no Session has a Split yet) and moved
+        into its bucket by :meth:`finish`; the metrics are retained for the report lines and each
+        Sample's `duration`.
         """
         images.render(audio, metrics, recording, self._root / images.IMAGES_DIR)
         wav = self._root / manifest.AUDIO_DIR / f"{recording.recording_id}.wav"
@@ -83,14 +67,10 @@ class StagedTree:
     def finish(self, config: Config) -> None:
         """Split, report, place, build the Manifest, and ask `commit` to promote the tree.
 
-        Takes the whole resolved Config because three consumers need different parts of it: the
-        splitter its ratios and seed, the Manifest and the provenance descriptor the rest. The
-        Recordings are reconstructed in `add` order — ingest order — which is the order the splitter
-        and the Manifest builder have always seen, and so what keeps `dataset_version` stable.
-
-        The two projections are named rather than inlined at their call sites, and `durations` is
-        derived from `measured` rather than from a second walk of the records — so the Manifest's
-        `duration` and the report line's `duration_s` cannot come from different reads.
+        Takes the whole resolved Config: the splitter needs its ratios and seed, the Manifest and
+        the provenance descriptor the rest. `durations` is derived from `measured` rather than a
+        second walk of the records, so the Manifest's `duration` and the report line's `duration_s`
+        cannot come from different reads.
         """
         recordings = [staged.recording for staged in self._staged]
         measured = [(staged.recording.recording_id, staged.metrics) for staged in self._staged]
@@ -106,9 +86,9 @@ class StagedTree:
     def _place_audio(self, split_result: split.SplitResult) -> None:
         """Move each flat Normalized WAV into `audio/<split>/<recording_id>.wav` (ADR-0003/0006).
 
-        A rename within the staging tree, so it stays on one filesystem and touches no durable
-        output. The bucketed path is the one the Manifest's `audio_filepath` records, so this is
-        what makes that pointer true.
+        A rename within the staging tree — one filesystem, no durable output touched. The bucketed
+        path is the one the Manifest's `audio_filepath` records, so this is what makes that pointer
+        true.
         """
         for staged in self._staged:
             target = self._root / manifest.audio_path(
@@ -122,13 +102,11 @@ class StagedTree:
 def open(data_out: Path) -> Iterator[StagedTree]:
     """Yield a staged tree for ``data_out``, discarding the staging on any exception (ADR-0003).
 
-    Named for what it does to a tree, and only ever read as `staging.open` — the builtin is not
-    shadowed for any caller, and this module does not use it.
-
-    `commit.prepare` clears the siblings a crashed run left behind, so recovery is nothing more than
-    re-running. `BaseException` rather than `Exception`: an interrupt must leave the last good
-    Dataset exactly as intact as a hard error does. On success the staging has been renamed away by
-    :meth:`StagedTree.finish`, so there is nothing left to discard.
+    Only ever read as `staging.open`, so the builtin is not shadowed for any caller.
+    `commit.prepare` clears the siblings a crashed run left behind. `BaseException` rather than
+    `Exception`: an interrupt must leave the last good Dataset as intact as a hard error does. On
+    success the staging has been renamed away by :meth:`StagedTree.finish`, so nothing is left to
+    discard.
     """
     root = commit.prepare(data_out)
     try:

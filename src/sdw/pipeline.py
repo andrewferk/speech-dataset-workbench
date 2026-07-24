@@ -1,17 +1,12 @@
-"""The two commands' internals.
+"""The two commands' internals: the shared preflight and the decode-once-feed-many loop.
 
-Every real stage has now landed. `validate` reads `recordings.csv` and resolves the Originals
-(ingest, #24), decodes each and converts it to mono 16 kHz (normalize, #25), and measures each
-Recording for its advisory flags (quality, #26) — then prints the digest and writes nothing,
-anywhere (ADR-0002). `build` runs those same three and hands each measured Recording to
-:mod:`sdw.staging`, which owns the `--data-out` tree while it is under construction: splitting,
-which assigns every Session to exactly one Split (#27); images, two PNGs per Recording (#31);
-reporting, `reports/quality.jsonl` and `reports/summary.txt` (#32); and the Manifest plus
-`dataset.json` (#28/#29). `staging` asks `commit`, the one writer, to write `dataset.json` last as
-the completeness sentinel and swap the tree into `--data-out` by rename (#30, ADR-0003, #64). A hard
-error anywhere leaves the last good Dataset untouched and no build ever visible half-finished.
-
-What is left here is what both commands share: the preflight, and the decode-once-feed-many loop.
+`validate` runs preflight + normalize + quality and writes nothing, anywhere (ADR-0002). `build`
+runs the same three and hands each measured Recording to :mod:`sdw.staging`, which owns the
+`--data-out` tree while it is under construction — splitting (#27), images (#31), reports (#32), the
+Manifest and `dataset.json` (#28/#29) — and asks `commit` to write the sentinel last and swap the
+tree in by rename (#30,
+ADR-0003, #64). A hard error anywhere leaves the last good Dataset untouched and no build ever
+visible half-finished.
 """
 
 from collections.abc import Iterator
@@ -35,12 +30,10 @@ def _check_paths(data_in: Path, config: Path | None) -> None:
 def _preflight(data_in: Path, config: Path | None) -> tuple[Config, list[Recording]]:
     """Path checks, config loading, and ingest — everything both commands share.
 
-    Config loading — including split-ratio validation (ADR-0004/0007, #23) — happens here so
-    that `validate` aborts on an illegal ratio too. If it lived in the splitter (a later stage
-    than `validate` reaches), a green preflight could not promise a `build` free of the hard errors
-    derivable from `--data-in` or `--config` — the whole of what it does promise. Ingest
-    runs here for the same reason: `recordings.csv` structural failures (#24) must abort `validate`,
-    not just `build`. Config is loaded first so a bad ratio aborts before any file is read.
+    Config loading (with split-ratio validation, ADR-0004/0007, #23) and ingest both run here so
+    `validate` aborts on the same `--data-in`/`--config` hard errors `build` would (#24) — the whole
+    of what a green preflight promises. Config is loaded first, so a bad ratio aborts before any
+    file is read.
     """
     _check_paths(data_in, config)
     resolved = load_config(config)
@@ -54,16 +47,10 @@ def _measured(
     """Yield each Recording with its Normalized audio and its metrics, one at a time (#25, #26).
 
     One Recording's audio is decoded at a time — a Dataset's worth of float64 does not fit
-    comfortably in memory, and no stage needs more than one at once. Two things happen per
-    iteration, and both must happen for *either* command: ADR-0005's decode gate fires here (a
-    non-WAV, corrupt, truncated, or zero-frame Original aborts the run), and the quality tap reads
-    the Original and the Normalized while both are in hand. Nothing here branches on a flag —
-    measuring is all it does.
-
-    It yields rather than returns because `build` needs the audio while it is still in hand — to
-    render (#31) and, later, to write — while `analyze` wants only the numbers. A list of metrics
-    would force `build` to decode a second time; a list of audio would hold the whole Dataset in
-    memory. Neither caller decides what the other gets.
+    comfortably in memory. ADR-0005's decode gate fires here, and the quality tap reads the Original
+    and the Normalized while both are in hand. It yields rather than returns so `build` gets the
+    audio while still in hand (to render and write) while `analyze` keeps only the numbers — without
+    either forcing a second decode or holding the whole Dataset in memory.
     """
     for recording in recordings:
         audio = normalize.normalize(data_in / recording.path)
@@ -75,9 +62,8 @@ def analyze(
 ) -> list[tuple[str, QualityMetrics]]:
     """Normalize and measure every Recording, keeping only its metrics. Writes nothing.
 
-    `validate`'s measuring half — it runs after `_preflight` and its metrics are what the digest
-    renders — and the reason `validate` cannot render an Image by accident: it is not that a flag
-    is off, it is that the only function it calls has nowhere to write to (ADR-0011).
+    `validate`'s measuring half. It cannot render an Image by accident not because a flag is off,
+    but because the only function it calls has nowhere to write to (ADR-0011).
     """
     return [
         (recording.recording_id, metrics)
@@ -88,10 +74,10 @@ def analyze(
 def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
     """Transform `data_in` into `data_out` as one atomic commit (#30, ADR-0003).
 
-    The pipeline's shape, and nothing else: preflight, open a staged tree, feed it each Recording as
-    the audio comes off the decoder, finish. Where each artifact lands, when the splitter runs, and
-    what an abort discards are :mod:`sdw.staging`'s — the decode loop is what `build` owns, because
-    one decode is what feeds every consumer while the audio is still in hand (#31, #32).
+    Preflight, open a staged tree, feed each Recording as its audio comes off the decoder, finish.
+    Where each artifact lands, when the splitter runs, and what an abort discards are
+    :mod:`sdw.staging`'s; the decode loop is what `build` owns, because one decode feeds every
+    consumer while the audio is still in hand (#31, #32).
     """
     resolved, recordings = _preflight(data_in, config)
     with staging.open(data_out) as tree:
@@ -103,11 +89,10 @@ def build(*, data_in: Path, data_out: Path, config: Path | None) -> None:
 def validate(*, data_in: Path, config: Path | None) -> None:
     """Preflight `data_in`, print the quality digest, and write nothing, anywhere (ADR-0002).
 
-    Normalization runs here in full and the audio is discarded: `validate`'s promise is that a
-    green run means `build` will not hit a hard error derivable from `--data-in` or `--config`, so
-    it has to decode every Original too.
-    Quality flags are advisory and never affect the exit code — a flagged Recording still exits 0,
-    because the operator curates by editing `recordings.csv`, not by the tool refusing to proceed.
+    Normalization runs in full and the audio is discarded: a green `validate` promises `build` will
+    not hit a hard error derivable from `--data-in` or `--config`, so it decodes every Original too.
+    Quality flags are advisory — a flagged Recording still exits 0, because the operator curates by
+    editing `recordings.csv`, not by the tool refusing to proceed (ADR-0007).
     """
     resolved, recordings = _preflight(data_in, config)
     print(quality.render_digest(analyze(data_in, recordings, resolved)), end="")
