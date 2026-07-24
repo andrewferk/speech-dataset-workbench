@@ -398,7 +398,15 @@ decisions above, **not** themselves design decisions:
   "opens a fallback / fails loudly if missing" seam).
 - **`AGENTS.md` index pointer** to §8 of this doc (per #108: index points at detail).
 - **Documented shell aliases:** the parked inbox `gh pr list --draft --label needs-human`
-  and the loop frontier `gh pr list --draft --label adversarial-review`.
+  and the loop frontier `gh pr list --draft --label adversarial-review`. Operator forms:
+
+  ```sh
+  # Parked loops waiting on a human (§6 "Local notification")
+  alias acr-parked='gh pr list --draft --label needs-human'
+
+  # Live loop frontier under adversarial review (§4 "Discovery")
+  alias acr-frontier='gh pr list --draft --label adversarial-review'
+  ```
 - **The riskiest slice to prototype first (#109):** drive **one** loop end-to-end —
   implementer subagent → push + marker → orchestrator detects reviewer's turn →
   `cursor-agent -p` → relay → round 2 → approval → `gh pr ready`. The genuinely unproven
