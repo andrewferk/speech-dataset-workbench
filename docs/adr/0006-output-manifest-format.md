@@ -141,6 +141,39 @@ and were silent on what a build emits for a Split with no Samples. Both are pinn
   `audio/<split>/` directory exists for an empty Split, so a `metadata.jsonl` there would describe
   a folder that is not present.
 
+### Canonical JSON byte format
+
+Every artifact that writes JSON — the canonical manifests, the HF views, and ADR-0007's quality
+report — emits it through one shared serializer (`sdw.serialization`, #54) rather than re-deriving
+the byte format per writer. Two constants and one join define that format:
+
+- **Compact separators** `(",", ":")`, not `json.dumps`'s spaced defaults `(", ", ": ")`.
+- **`ensure_ascii=False`**: a non-ASCII character is emitted as itself (UTF-8), not as a `\uXXXX`
+  escape. This is forced by the *text*: the `text` field carries Prompt text verbatim, so escaping
+  would make a manifest of accented or non-Latin prompts unreadable to the operator who has to check
+  it, and would inflate the bytes a consumer decodes for no gain — every file is UTF-8 already, so an
+  escape protects against nothing. A Manifest therefore *can* differ byte-for-byte on real prompt
+  text, and that is intended. `quality.jsonl` cannot: every field of it is hash-derived or drawn from
+  a fixed ASCII vocabulary, which is why unifying both writers on this value re-baselines no golden.
+- **No `sort_keys`**: key order is the caller's insertion order, because both this ADR's Sample line
+  and ADR-0007's quality line fix an order that is not alphabetical. The one JSON in the tool that
+  *is* key-sorted is the `dataset_version` preimage (ADR-0010) — a single object, not a line-per-
+  record file — which serializes through `Config.canonical_json`, not through this module.
+
+**This format is load-bearing, not cosmetic.** ADR-0008 compares artifacts as exact goldens, and
+ADR-0010 hashes the emitted Manifest **bytes** into `dataset_version` — so a separator or an escape
+is part of a Dataset's identity.
+
+**Why one shared serializer.** The Manifest, the HF view, and the quality report each used to
+re-derive these decisions independently, and had drifted apart on `ensure_ascii` before anyone
+noticed. That drift could not fail a test: each artifact has its own golden, so two files disagreeing
+about how to spell a character reads as two intentional baselines rather than as a bug. Stating the
+format once and importing it is what makes "the Manifest and the quality report agree" a property of
+the code. The serializer is a dependency leaf — it imports nothing from `sdw`, so every writer can
+depend on it and none can create a cycle. `sdw.config` depends on it too (the `dataset_version`
+preimage needs the same byte format) rather than owning it, because a JSONL join does not belong to
+"the effective config", and config would otherwise change for two unrelated reasons.
+
 ## Considered and rejected
 
 - **A single manifest serving both consumers** — impossible: NeMo needs `audio_filepath`
