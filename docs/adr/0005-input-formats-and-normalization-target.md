@@ -28,6 +28,16 @@ the level that was recorded.
   validation/quality spec (#13). This is the clean line between #8's hard-abort policy and the
   report-only quality metrics of #6/#13.
 
+> **Amended by #96** — *"PCM WAV" is two independent conditions.* Decodability is necessary but not
+> sufficient: libsndfile decodes far more than v0.1 accepts, and reports container and encoding
+> separately, so the gate checks both. The **container** must be a RIFF WAV form — plain `WAV`,
+> `WAVEX` (extensible), or `RF64` (the >4 GB variant); a FLAC or OGG carrying a `.wav` name is
+> rejected even though libsndfile would decode it. The **encoding** must be a `PCM_` subtype: a WAV
+> container can carry `MPEG_LAYER_III`, `ULAW`, or ADPCM — an MP3-in-a-WAV is exactly the lossy
+> source rejected above, and a container-only gate would admit it through the back door — while
+> `FLOAT`/`DOUBLE` WAVs are lossless but still not PCM. Widening either set is an ADR change, not a
+> code change.
+
 ### Canonical target — mono · 16 kHz · 16-bit PCM WAV
 
 The Normalized target is **mono, 16 kHz, signed 16-bit PCM WAV** (`PCM_16`) — the near-universal
@@ -94,6 +104,10 @@ hashes**, not cross-machine bit-exactness.
   forces FFmpeg. Rejected: unjustified surface for a controlled-capture workbench.
 - **`scipy.signal.resample_poly` (BSD)** — more portable, but below soxr `HQ` in quality; LGPL was
   acceptable, so quality won.
+- **Sum or single-channel downmix** (vs. the mean above) — a sum raises the level and can clip; a
+  channel pick discards content and can silence a Recording whose signal sits on the dropped
+  channel. The mean is neither, and a dead channel it leaves quiet is surfaced by the low-volume
+  quality check rather than corrected here.
 - **Peak- or loudness-normalization** — irreversible, and it would gut the clipping/low-volume
   quality checks by pegging every file's level. Rejected in favor of faithful capture.
 - **Seeded dither; 24-bit / float32 output; a `[normalize]` config section** — all add complexity
