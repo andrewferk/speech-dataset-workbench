@@ -231,13 +231,10 @@ def stft_dbfs(
 ) -> tuple[npt.NDArray[np.float64], tuple[float, float]]:
     """The STFT magnitude in absolute dBFS clamped to :data:`DB_RANGE`, and the seconds it covers.
 
-    Returns ``(201 bins, frames)`` over 0 .. 8 kHz and ``plotted_s``, the ``(start, end)`` of the
-    plotted region's outer edges (half a hop beyond the first and last frame centres). Magnitude is
-    scaled by ``2 / sum(window)`` so a bin reads on the waveform's 0 .. 1 full-scale ruler — what
-    makes the dB absolute and comparable across images; the conversion is ADR-0007's ``20*log10``.
-
-    Only fully-supported frames are kept where the Recording has them — a zero-padded border frame
-    reads as a broadband stripe. A Recording too short for two such frames keeps the padded frames:
+    Returns ``(201 bins, frames)`` over 0 .. 8 kHz and ``plotted_s``, the plotted region's outer
+    edges. Magnitude is scaled by ``2 / sum(window)`` so a bin reads on the waveform's full-scale
+    ruler — what makes the dB absolute and comparable across images (ADR-0007). Only fully-supported
+    frames are kept where the Recording has them; one too short for two keeps the padded frames, so
     it is always renderable (ADR-0011).
     """
     window = hann(N_FFT, sym=False)

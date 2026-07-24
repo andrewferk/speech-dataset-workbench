@@ -85,15 +85,11 @@ class QualityMetrics:
     def rounded(self) -> dict[str, float]:
         """The numeric metrics at ADR-0007 precision, keyed by name in declaration order (#68).
 
-        The dict `quality.jsonl` is built from. Rounded here, not at measurement, so the
-        full-precision floats stay on the dataclass for the digest and image titles to format their
-        own widths, and so two runs within a float ULP still serialize identically (ADR-0008 needs
-        no tolerance). ``round`` keeps these JSON numbers; spelling is the artifact's call (#54).
-
-        Declaration order *is* a `quality.jsonl` line's key order, so reordering the fields above is
-        an output change — reports are excluded from `dataset_version` (ADR-0010), so a reorder
-        cannot be caught by a version mismatch; ``test_key_order_is_fixed_not_insertion_dependent``
-        says so out loud.
+        The dict `quality.jsonl` is built from. Rounded here, not at measurement, so full-precision
+        floats stay on the dataclass for the digest and image titles, and two runs within a ULP
+        serialize identically — ADR-0008 needs no tolerance (#54). Declaration order *is* a line's
+        key order, so reordering the fields above is an output change a `dataset_version` mismatch
+        can't catch (ADR-0010); ``test_key_order_is_fixed_not_insertion_dependent`` guards it.
         """
         return {
             field.name: round(getattr(self, field.name), _PRECISION[field.name])
