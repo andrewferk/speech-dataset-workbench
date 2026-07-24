@@ -1,37 +1,14 @@
 """Partition the Samples into train/val/test, one whole Session at a time (#27, ADR-0004).
 
-The fourth pipeline stage, and the first one on the `build` side alone. It takes the Recordings
-that survived normalize + validate — soft-flagged ones included, because all attempts are data —
-and returns a :class:`SplitResult`: which Session went where, plus the facts a later stage needs
-to explain that to an operator.
+The fourth pipeline stage. It takes the Recordings that survived normalize + validate (soft-flagged
+included — all attempts are data) and returns a :class:`SplitResult`: the assignment plus the facts
+a later stage needs to explain it. Disclosures are data, not prose — `summary.txt` (#10) renders
+them.
 
-Three facts pin the shape:
-
-- **The unit is the Session and the grouping is not a knob.** A whole Session lands in exactly one
-  Split, so a Prompt re-read within a sitting can never straddle train and test. The guarantee is
-  session-level, not speaker-level: v0.1 data is single-speaker, and one Speaker cannot fill three
-  disjoint splits. A Speaker recurring across splits is therefore expected — surfaced as a
-  disclosure when there is more than one Speaker, never as a change to the partition.
-
-- **The targets are absolute Sample counts, computed once.** ``N`` is known before the walk
-  begins, so ``target_i = ratio_i x N`` and ``deficit_i = target_i - assigned_i`` are total-order
-  stable from the very first Session, with no ``0/0`` special case. Deficits stay floats and go
-  **negative** on overshoot — deliberately, so an overshot Split stops attracting Sessions. The
-  deficit is never redefined against Samples-assigned-so-far, and never rounded.
-
-- **Nothing here is a decision the tool makes twice.** Order is ``sha256("<seed>:<session_id>")``,
-  destination ties break by :data:`SPLIT_ORDER`, and the repair recomputes state between moves.
-  No RNG, no clock, no host facts — the same ``--data-in`` plus the same effective config yields a
-  byte-identical split. Cross-*version* stability is not claimed: adding a Recording may reshuffle
-  the partition, which is fine because a changed input is already a new ``dataset_version``.
-
-**The disclosures are returned as data, not rendered.** The repair moves, the speaker-overlap
-finding, the targets beside the realized counts, and the below-minimum flag are all fields on the
-result; `summary.txt` (#10) owns the prose. That keeps this module a pure function and keeps the
-one place that phrases a split fact from being three.
-
-The result carries what a caller reads and no more (#70) — see :class:`SplitResult` for the rule
-and for the quantities that are a caller's own subtraction rather than a field.
+Determinism is byte-exact and load-bearing (ADR-0004): order is ``sha256("<seed>:<session_id>")``,
+ties break by :data:`SPLIT_ORDER`, deficits are absolute Sample counts — never rounded, never
+redefined against Samples-assigned-so-far — that go negative on overshoot, and the repair recomputes
+state between moves. No RNG, clock, or host facts.
 """
 
 import hashlib
@@ -41,18 +18,16 @@ from dataclasses import dataclass
 from sdw.config import SplitConfig
 from sdw.ingest import Recording
 
-# The three splits, in the order that breaks every tie: destination ties during the walk, donor
-# ties during the repair, and the order the repair itself visits starved splits. Total, stable,
-# and seed-independent — hashing the split *name* instead would make tie-breaks seed-dependent
-# and the ADR's worked example unverifiable by hand (ADR-0004).
+# The order that breaks every tie: destination during the walk, donor during the repair, and the
+# order the repair visits starved splits. Total, stable, seed-independent — hashing the split *name*
+# would make tie-breaks seed-dependent and the ADR's worked example unverifiable by hand (ADR-0004).
 SPLIT_ORDER = ("train", "val", "test")
 
 # Non-emptiness is only achievable — and so only promised — once there is one Session per split.
 MIN_SESSIONS_FOR_REPAIR = 3
 
 # A donor must keep a Session after donating, or the repair merely relocates the emptiness it was
-# called to fix. Load-bearing, not decoration: in ADR-0004's worked example the largest-surplus
-# split holds exactly one Session and is ineligible for precisely this reason.
+# called to fix (ADR-0004).
 MIN_DONOR_SESSIONS = 2
 
 
@@ -60,9 +35,9 @@ MIN_DONOR_SESSIONS = 2
 class RepairMove:
     """One non-emptiness repair: a Session taken from ``donor`` and given to ``recipient``.
 
-    Reported because the realized counts show the repair's *outcome* but not its *mechanism* — an
-    operator seeing ``test = 3`` cannot otherwise tell whether water-filling chose it or the
-    repair rescued it, and those mean different things about their data (ADR-0004).
+    Reported because the realized counts show the repair's *outcome* but not its *mechanism* —
+    ``test = 3`` alone cannot say whether water-filling chose it or the repair rescued it, and those
+    mean different things about the data (ADR-0004).
     """
 
     session_id: str
@@ -72,11 +47,11 @@ class RepairMove:
 
 @dataclass(frozen=True)
 class SpeakerOverlap:
-    """One Speaker appearing in more than one Split — report-only, and never blocking.
+    """One Speaker appearing in more than one Split — report-only, never blocking.
 
-    Emitted only when the Dataset has more than one distinct Speaker: on single-speaker data,
-    which is v0.1's expected shape, the overlap is unavoidable and the note would fire on every
-    build while naming nothing the operator could act on (ADR-0004).
+    Emitted only with more than one distinct Speaker: on single-speaker data (v0.1's expected shape)
+    the overlap is unavoidable and the note would fire on every build naming nothing actionable
+    (ADR-0004).
     """
 
     speaker_id: str
@@ -87,29 +62,14 @@ class SpeakerOverlap:
 class SplitResult:
     """The partition plus everything needed to explain it, all as data.
 
-    ``targets`` beside ``samples`` is the ratio disclosure's whole substance: an operator who
-    configures 80-10-10 and receives 50-25-25 is looking at arithmetic — whole Sessions are
-    indivisible — and both numbers being present lets them draw that conclusion themselves.
+    ``targets`` beside ``samples`` is the ratio disclosure — both shown so a caller reads a missed
+    ratio as arithmetic, not a bug (ADR-0004).
 
-    **A field earns its place here if a production caller reads it, or if it is read and its
-    derivation encodes a decision this module owns** (#70). *Production* is load-bearing: a test is
-    a caller too, and all three fields removed by #70 had a test reading them. Being read by the
-    suite is what makes a field look alive, not what earns it.
-
-    Per-Split Session counts, per-Split deficits, and the set of empty Splits were all once fields
-    and are none of them now: each is arithmetic over a field still published here — a count over
-    ``assignments``, ``targets`` less ``samples``, a ``samples`` count of zero — and the arithmetic
-    carries no decision, so a caller that wants one can do it. ``below_min_sessions`` stays under
-    the second clause: the :data:`MIN_SESSIONS_FOR_REPAIR` comparison is this module's rule about
-    when it makes the non-emptiness promise, and #10 re-deriving it would put that judgement in the
-    renderer.
-
-    There is deliberately no companion flag for an empty Split at or above
-    :data:`MIN_SESSIONS_FOR_REPAIR` Sessions — the "repair failed to buy a promise the tool made"
-    case. ADR-0004's pigeonhole argument proves an eligible donor always exists there, so the
-    warning would be prose no build can emit. Were the proof ever to stop holding, the failure is
-    already legible in `summary.txt`: a realized count of zero beside a nonzero target, with no
-    repair line beneath it.
+    Fields are minimal (#70): one is present only if a *production* caller reads it, or its
+    derivation encodes a decision this module owns. Session counts, deficits, and the empty-Split
+    set are omitted as arithmetic over published fields; ``below_min_sessions`` stays because the
+    :data:`MIN_SESSIONS_FOR_REPAIR` comparison is this module's rule, not #10's — and there is no
+    empty-Split flag above that count, since pigeonhole guarantees a donor (ADR-0004).
     """
 
     assignments: dict[str, str]
@@ -130,9 +90,8 @@ def split_sessions(recordings: Sequence[Recording], config: SplitConfig) -> Spli
     """Assign every Session to exactly one Split, deterministically (ADR-0004).
 
     Pure: the same Recordings (in any order) and the same config always produce the same result.
-    Never raises and never aborts — an input too small for three splits produces a valid partition
-    with empty ``val``/``test`` and flags it, because refusing to build would block the operator
-    during exactly the bootstrapping phase the tool has to be usable in.
+    Never raises and never aborts — an input too small for three splits yields a valid partition
+    with empty ``val``/``test``, flagged, so the operator isn't blocked while bootstrapping.
     """
     sizes = _session_sizes(recordings)
     order = _hash_order(sizes, config.seed)
@@ -165,10 +124,8 @@ def _session_sizes(recordings: Sequence[Recording]) -> dict[str, int]:
 def _hash_order(sizes: dict[str, int], seed: int) -> tuple[str, ...]:
     """Sessions ordered by ``sha256("<seed>:<session_id>")``.
 
-    A hex sort key rather than a seeded shuffle: ``random.shuffle`` can drift across Python
-    versions, which would break the byte-identical claim ``dataset_version`` rests on. Hashing
-    also decorrelates the walk from any ordering baked into the id, so "test" is not simply the
-    newest Sessions.
+    A stable hex sort key: ``random.shuffle`` would look equivalent but drifts across Python
+    versions, breaking the byte-identity ``dataset_version`` rests on (ADR-0004).
     """
     return tuple(
         sorted(sizes, key=lambda sid: hashlib.sha256(f"{seed}:{sid}".encode()).hexdigest())
@@ -192,7 +149,7 @@ def _max_deficit(targets: dict[str, float], assigned: dict[str, int]) -> str:
     """The hungriest Split; ties fall to :data:`SPLIT_ORDER`, leftmost winning.
 
     ``max`` over ``SPLIT_ORDER`` keeps the first maximum it sees, which *is* the tie-break — the
-    ordering is not incidental to this line.
+    ordering is not incidental here.
     """
     return max(SPLIT_ORDER, key=lambda name: targets[name] - assigned[name])
 
@@ -203,11 +160,10 @@ def _repair(
     sizes: dict[str, int],
     targets: dict[str, float],
 ) -> tuple[RepairMove, ...]:
-    """Give a starved ``val``/``test`` one Session each, at the least ratio cost available.
+    """Give a starved ``val``/``test`` one Session each, at the least ratio cost (ADR-0004).
 
     Mutates ``assignments`` in place and returns what it did. Runs only with at least three
-    Sessions — below that a three-way split is mathematically impossible and there is nothing to
-    repair. State is recomputed between the two moves, so repairing ``val`` can change which split
+    Sessions. State is recomputed between the two moves, so repairing ``val`` can change which split
     donates to ``test``.
     """
     if len(order) < MIN_SESSIONS_FOR_REPAIR:
@@ -230,11 +186,10 @@ def _donor_split(
 ) -> str | None:
     """The minimum-deficit Split — the largest surplus — that can spare a Session.
 
-    Largest-surplus rather than "always train": ratios are operator-configurable, so under
-    ``train = 0.2`` a fixed train donor could strip train to empty while repairing test, inverting
-    the guarantee the repair exists to serve. Pigeonhole makes an eligible donor certain whenever
-    there are >= 3 Sessions and a Split is empty, so ``None`` is unreachable in practice — returned
-    rather than asserted so a future ratio rule cannot turn a disclosure into a crash.
+    Largest-surplus, not "always train": under ``train = 0.2`` a fixed train donor could strip train
+    to empty while repairing test, inverting the guarantee (ADR-0004). Pigeonhole makes a donor
+    certain at >= 3 Sessions, so ``None`` is unreachable — returned rather than asserted so a future
+    ratio rule cannot turn a disclosure into a crash.
     """
     samples = _samples_per_split(assignments, sizes)
     sessions = _sessions_per_split(assignments)
@@ -249,12 +204,9 @@ def _smallest_session(
 ) -> str:
     """The donor's Session with the fewest Samples; size ties fall to hash order, first winning.
 
-    The repair is a deliberate ratio violation in service of non-emptiness, so it should cost the
-    least ratio fidelity available — moving a 9-Sample Session where a 1-Sample one was there
-    damages both splits to satisfy a guarantee one Sample would meet (ADR-0004).
-
-    ``held`` is built in hash order and :func:`min` keeps the first of equal keys, so the size tie
-    falls to hash order without a second sort key.
+    Least ratio cost: moving a 9-Sample Session where a 1-Sample one was there damages both splits
+    to satisfy a guarantee one Sample would meet (ADR-0004). ``held`` is built in hash order and
+    :func:`min` keeps the first of equal keys, so the size tie needs no second sort key.
     """
     held = [session_id for session_id in order if assignments[session_id] == donor]
     return min(held, key=lambda session_id: sizes[session_id])
