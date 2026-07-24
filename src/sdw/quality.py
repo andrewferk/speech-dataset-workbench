@@ -1,29 +1,14 @@
 """Measure each Recording's audio, flag what crosses a threshold, and render the digest (#26).
 
-The third pipeline stage, and the one that completes `validate`. Normalization (#25) handed back
-both the decoded Original and the Normalized samples; this stage reads those arrays and returns
-:class:`QualityMetrics` — seven numbers plus zero or more advisory flags. Nothing here can abort a
-run, drop a Recording, or change an exit code: a structural failure is ADR-0005's hard error, and a
-quality flag is descriptive metadata a downstream consumer may filter on. All attempts are data.
-
-Three facts pin the shape:
-
-- **Clipping reads the Original, everything else reads the Normalized.** Clipping is a flat-top
-  artifact of the *capture*: the downmix can average a clipped channel away and soxr smears the
-  flat top and adds overshoot, so a post-resample clip metric is systematically wrong in both
-  directions. The other three metrics describe what the Sample actually ships, so they read the
-  Normalized (ADR-0007).
-
-- **What a check means is fixed; only where its threshold sits is a knob.** The constants below —
-  the -120 floor, the 3-sample / 0.99 FS clip run, the 20 ms frame, the 0.2 s guard — are not
-  configurable, so two configs cannot disagree about what "clipped" is while minting
-  indistinguishable `dataset_version`s. :class:`~sdw.config.QualityConfig`'s four knobs move
-  thresholds only.
-
-- **Transparent math over clever math.** RMS is the raw ``20*log10(sqrt(mean(s^2)))`` convention
-  with no AES17 offset, so an inspector can reproduce any number here from the PCM by hand. Nothing
-  is model-based, nothing is gated, and the audio is never modified — the active-region trim is a
-  *measurement* window, not an edit.
+The third pipeline stage, and the one that completes `validate`. Reads the decoded Original and the
+Normalized samples (#25) and returns :class:`QualityMetrics` — seven numbers plus advisory flags.
+Nothing here aborts a run, drops a Recording, or changes an exit code — a structural failure is
+ADR-0005's hard error, upstream; a flag here is descriptive metadata a consumer may filter on
+(ADR-0007). Clipping reads the Original (pre-resample), the other
+metrics the Normalized; what each check *means* is fixed by the constants below, and only its
+threshold is a :class:`~sdw.config.QualityConfig` knob — two configs cannot disagree about what
+"clipped" is while minting indistinguishable `dataset_version`s (ADR-0007). The audio is never
+modified: the active-region trim is a measurement window, not an edit.
 """
 
 from collections.abc import Sequence
@@ -35,57 +20,41 @@ import numpy.typing as npt
 from sdw.config import QualityConfig
 from sdw.normalize import TARGET_SAMPLE_RATE, NormalizedAudio
 
-# The floor for `20*log10(0)`, which is otherwise -inf and unserializable. Well below anything a
-# real capture reaches, so a floored value reads unambiguously as "silent" (ADR-0007).
+# Floor for `20*log10(0)`, otherwise -inf and unserializable (ADR-0007).
 DBFS_FLOOR = -120.0
 
-# A clip run: >= 3 consecutive samples at >= 0.99 FS. The 0.99 tolerance catches ADCs that saturate
-# a code or two below max, and applies uniformly across any Original bit depth once decoded to
-# float. Sample peak only — no true-peak oversampling.
+# A clip run: >= 3 consecutive samples at >= 0.99 FS (ADR-0007). Sample peak only, no true-peak
+# oversampling; 0.99 catches ADCs that saturate a code below max.
 CLIP_RUN_MIN = 3
 CLIP_THRESHOLD = 0.99
 
-# Silence framing: 20 ms non-overlapping frames (320 samples at 16 kHz), and a minimum-duration
-# guard on the leading and trailing runs so a natural pause is not reported as head/tail silence.
+# Silence framing: 20 ms non-overlapping frames, plus a minimum-duration guard on the leading and
+# trailing runs so a natural pause is not reported as head/tail silence (ADR-0007).
 SILENCE_FRAME_S = 0.02
 MIN_SILENCE_RUN_S = 0.2
 SILENCE_FRAME_SAMPLES = int(SILENCE_FRAME_S * TARGET_SAMPLE_RATE)
 MIN_SILENCE_RUN_SAMPLES = int(MIN_SILENCE_RUN_S * TARGET_SAMPLE_RATE)
 
-# The v0.1 flag vocabulary, in full. Silence contributes metrics only and raises nothing: a natural
-# pause is something to report, not something to flag. `flags` is always ordered by this tuple, so
-# two runs agree byte for byte.
+# The v0.1 flag vocabulary, in full (ADR-0007). Silence raises nothing — a pause is reported, not
+# flagged. `flags` is always ordered by this tuple, so two runs agree byte for byte.
 FLAG_CLIPPING = "clipping"
 FLAG_LOW_VOLUME = "low_volume"
 FLAG_DURATION_OUT_OF_RANGE = "duration_out_of_range"
 FLAGS = (FLAG_CLIPPING, FLAG_LOW_VOLUME, FLAG_DURATION_OUT_OF_RANGE)
 
-# Precision for every rendered form of these metrics (ADR-0007): dBFS 2 dp, ratios 4 dp, seconds
-# 3 dp. Applied at render time rather than at measurement, so the digest and `quality.jsonl` round
-# one set of full-precision numbers the same way instead of rounding twice. Public because
-# :mod:`sdw.images` titles and the Manifest's `duration` render the same quantities and must agree
-# by construction rather than by two modules happening to hold the same literals (#32). The
-# `quality.jsonl` path no longer reads them directly — it goes through
-# :meth:`QualityMetrics.rounded`, which applies them from :data:`_PRECISION` (#68).
-#
-# They govern *how many places a number is worth*, not how it is spelled, so they are equally the
-# `round` in `quality.jsonl` and the Manifest's `duration` and the f-string width in an image title
-# — each caller picks the spelling its artifact needs (#54). Moving one is a decision about the
-# metric, and it must move everywhere the metric is written or a build ships two answers for one
-# Recording. Changing a *width* for display alone would be a different edit, and does not belong
-# here.
+# Precision per metric (ADR-0007): dBFS 2 dp, ratios 4 dp, seconds 3 dp. Public because image titles
+# and the Manifest's `duration` render the same quantities and must agree by construction, not by
+# holding the same literals (#32, #54). These govern how many places a number is worth, not how it
+# is spelled; moving one must move everywhere the metric is written or a build ships two answers for
+# one Recording.
 DBFS_DP = 2
 RATIO_DP = 4
 SECONDS_DP = 3
 
-# Which of the three each metric is measured in. Private, because it is not a decision a caller
-# makes — the constants above are the decision, and this only records which one each field takes.
-#
-# It is deliberately *not* the source of truth for which metrics exist:
-# :meth:`QualityMetrics.rounded` walks the dataclass, so a new metric is carried into
-# `quality.jsonl` the day it is declared rather than the day someone remembers a second list. A
-# field declared without an entry here raises on the next render — a loud failure, where restating
-# the field names in :mod:`sdw.reports` used to drop the metric from the record in silence (#68).
+# Which precision each metric takes. Private: the constants above are the decision, this only maps
+# fields to them. Not the source of truth for which metrics exist — :meth:`QualityMetrics.rounded`
+# walks the dataclass, and a field with no entry here raises on the next render rather than dropping
+# from the record in silence (#68).
 _PRECISION = {
     "duration_s": SECONDS_DP,
     "peak_dbfs": DBFS_DP,
@@ -99,10 +68,9 @@ _PRECISION = {
 
 @dataclass(frozen=True)
 class QualityMetrics:
-    """One Recording's measurements plus the flags they tripped.
+    """One Recording's seven measurements plus the flags they tripped.
 
-    The seven metrics are always reported, flags or not — a clean Recording is as much a line of the
-    quality report as a flagged one. `flags` is ordered by :data:`FLAGS` and is empty when clean.
+    All seven are reported, clean or not; `flags` is ordered by :data:`FLAGS`, empty when clean.
     """
 
     duration_s: float
@@ -115,29 +83,17 @@ class QualityMetrics:
     flags: tuple[str, ...]
 
     def rounded(self) -> dict[str, float]:
-        """The numeric metrics at ADR-0007 precision, keyed by name in declaration order.
+        """The numeric metrics at ADR-0007 precision, keyed by name in declaration order (#68).
 
-        The rendering `quality.jsonl` is built from (#68). Rounded here rather than at measurement,
-        so the full-precision floats stay on the dataclass for the digest and the image titles to
-        format to their own widths — each rendering derives from the measured number rather than
-        from another rendering's already-rounded one.
+        The dict `quality.jsonl` is built from. Rounded here, not at measurement, so the
+        full-precision floats stay on the dataclass for the digest and image titles to format their
+        own widths, and so two runs within a float ULP still serialize identically (ADR-0008 needs
+        no tolerance). ``round`` keeps these JSON numbers; spelling is the artifact's call (#54).
 
-        Rounding at render is also what lets the file be an exact golden: two runs that agree to
-        within a float ULP still serialize identically, so ADR-0008's comparison needs no tolerance
-        machinery.
-
-        ``round`` rather than fixed-decimal strings, because these stay JSON numbers for a consumer
-        that parses them — the human-facing renderings format for column width, which is a decision
-        about the artifact and stays with the artifact. That split is deliberate and was the thing
-        weighed when this method was designed: a `format(field)` here would have to decide the unit
-        suffix, the separator and the column width too, which is most of what the four call sites
-        differ on. Precision is a decision about the metric; spelling is a decision about the
-        artifact (#54, #68).
-
-        Declaration order *is* the key order of a `quality.jsonl` line. That makes reordering the
-        fields above an output change; ``test_key_order_is_fixed_not_insertion_dependent`` is what
-        says so out loud, since the reports are deliberately excluded from `dataset_version`
-        (ADR-0010) and so a reorder cannot be caught by a version mismatch.
+        Declaration order *is* a `quality.jsonl` line's key order, so reordering the fields above is
+        an output change — reports are excluded from `dataset_version` (ADR-0010), so a reorder
+        cannot be caught by a version mismatch; ``test_key_order_is_fixed_not_insertion_dependent``
+        says so out loud.
         """
         return {
             field.name: round(getattr(self, field.name), _PRECISION[field.name])
@@ -183,10 +139,9 @@ def measure(audio: NormalizedAudio, config: QualityConfig) -> QualityMetrics:
 def _clipping(original: npt.NDArray[np.float64]) -> tuple[float, float]:
     """``(peak_dbfs, clip_ratio)`` over the decoded Original.
 
-    Runs are found *within* a channel, because a flat top is a per-converter event: interleaving
-    channels would stitch unrelated samples into a phantom run and splitting one real run across
-    channels would erase it. `peak_dbfs` is the max across channels and `clip_ratio` the total
-    clipped-run samples over ``frames x channels``, so the flag trips if any channel clipped.
+    Runs are found *within* a channel: interleaving channels would stitch unrelated samples into a
+    phantom run. `peak_dbfs` is the max across channels, `clip_ratio` the clipped-run samples over
+    ``frames x channels``, so the flag trips if any channel clipped.
     """
     channels = original if original.ndim == 2 else original.reshape(-1, 1)
     magnitude = np.abs(channels)
@@ -200,9 +155,8 @@ def _clipping(original: npt.NDArray[np.float64]) -> tuple[float, float]:
 def _run_sample_count(mask: npt.NDArray[np.bool_]) -> int:
     """How many samples of ``mask`` belong to a run of >= :data:`CLIP_RUN_MIN` consecutive Trues.
 
-    A lone sample at full scale is a transient, not a clip run, and contributes nothing. Counting is
-    done on run boundaries — the diff of the padded mask marks each run's start and end — so the
-    whole channel is one vectorized pass rather than a Python loop over samples.
+    A lone full-scale sample is a transient, not a clip run. Counted on run boundaries (the diff of
+    the padded mask) so the whole channel is one vectorized pass, not a Python loop.
     """
     if not mask.any():
         return 0
@@ -218,8 +172,7 @@ def _run_sample_count(mask: npt.NDArray[np.bool_]) -> int:
 class _Silence:
     """The silence measurements plus the active window the low-volume check reuses.
 
-    All three reported numbers are report-only: silence raises no flag, so a Recording that opens
-    with a breath and closes with a pause is described, never flagged.
+    All three numbers are report-only — silence raises no flag (ADR-0007).
     """
 
     leading_s: float
@@ -231,9 +184,8 @@ class _Silence:
     def active_region(self, samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
         """``samples`` narrowed to first-to-last non-silent frame — a measurement trim only.
 
-        Empty when every frame is silent, which floors `active_rms_dbfs` to -120 and correctly
-        trips `low_volume`: a Recording with nothing in it is exactly the mic-level collapse the
-        check exists to catch.
+        Empty when every frame is silent, flooring `active_rms_dbfs` to -120 and tripping
+        `low_volume` — the mic-level collapse the check exists to catch.
         """
         return samples[self.active_start : self.active_end]
 
@@ -241,9 +193,8 @@ class _Silence:
 def _silence(samples: npt.NDArray[np.float64], threshold_dbfs: float) -> _Silence:
     """Frame ``samples`` into 20 ms non-overlapping frames and locate the silent ones.
 
-    A trailing partial frame folds into the last frame rather than forming a short frame of its
-    own, so a 0.5 s Recording is 25 frames and the last one is simply a little longer — no frame
-    is ever measured over a window too short to have a meaningful RMS.
+    A trailing partial frame folds into the last frame rather than forming its own, so no frame is
+    ever measured over a window too short to have a meaningful RMS.
     """
     bounds = _frame_bounds(len(samples))
     silent = np.array(
@@ -251,11 +202,9 @@ def _silence(samples: npt.NDArray[np.float64], threshold_dbfs: float) -> _Silenc
     )
     active = np.flatnonzero(~silent)
     if active.size == 0:
-        # Wholly silent: one run spanning the whole Recording, which is both the leading and the
-        # trailing run, and no active region at all. The guard still applies — it applies to *the
-        # leading and trailing runs*, and this is one, so a 0.1 s dead Recording reports 0.0 exactly
-        # as a 0.1 s leading pause does. `low_volume` is what says this Recording is empty; silence
-        # never does.
+        # Wholly silent: one run spanning the Recording, counted as both leading and trailing, no
+        # active region. The guard still applies, so a 0.1 s dead Recording reports 0.0 like a 0.1 s
+        # pause; `low_volume`, not silence, is what says the Recording is empty.
         return _Silence(
             leading_s=_guarded(len(samples)),
             trailing_s=_guarded(len(samples)),
@@ -306,8 +255,7 @@ def _rms(samples: npt.NDArray[np.float64]) -> float:
 def _dbfs(amplitude: float) -> float:
     """Raw ``20*log10`` — deliberately no AES17 offset, so a full-scale sine reads about -3 dBFS.
 
-    The offset is a sine-calibration convenience v0.1 does not need, and it hides math from an
-    inspector reproducing a number by hand (ADR-0007).
+    The offset would hide math from an inspector reproducing a number by hand (ADR-0007).
     """
     if amplitude <= 0.0:
         return DBFS_FLOOR
@@ -320,17 +268,11 @@ def _dbfs(amplitude: float) -> float:
 def render_digest(results: Sequence[tuple[str, QualityMetrics]]) -> str:
     """The human quality digest: a per-flag tally, then one line per ``(Recording, flag)`` pair.
 
-    A Recording carrying two flags gets two lines, because the evidence a line states is *per
-    flag* — combining them would concatenate two unrelated sets of numbers and the flag column
-    would stop being one value wide (ADR-0007).
-
-    The same text `validate` prints to stdout and `build` folds into `reports/summary.txt`, so the
-    two commands can never describe one input differently. Clean Recordings are counted but not
-    listed — the digest is a worklist. Deterministic: no wall-clock, no host, no set iteration.
-
-    The tally lists all three flags even at zero, so the digest has one fixed shape: an operator
-    diffing two runs sees a count change rather than a line appear, and a zero is itself the useful
-    answer to "did anything clip?". Only the flagged *list* is elided when empty.
+    A Recording with two flags gets two lines — a line's evidence is per flag (ADR-0007). The same
+    text `validate` prints and `build` folds into `reports/summary.txt`. Clean Recordings are
+    counted, not listed — the digest is a worklist. Deterministic: no wall-clock, host, or set
+    iteration. The tally lists all three flags even at zero, so the shape is fixed and a diff shows
+    a count change rather than a line appearing; only the flagged list is elided when empty.
     """
     flagged = [(rid, metrics) for rid, metrics in results if metrics.flags]
     lines = [
@@ -355,9 +297,8 @@ def render_digest(results: Sequence[tuple[str, QualityMetrics]]) -> str:
 def _evidence(flag: str, metrics: QualityMetrics) -> str:
     """The numbers that justify one flag — the operator should not have to open quality.jsonl.
 
-    Fixed decimal places rather than :func:`round`, which drops trailing zeros and would render an
-    exactly-full-scale peak as ``0.0dBFS`` next to a neighbouring ``-0.02dBFS``. A column of
-    same-width numbers is scannable; a ragged one is not.
+    Fixed decimal places, not :func:`round`: `round` drops trailing zeros, rendering a full-scale
+    peak as ``0.0dBFS`` beside a ``-0.02dBFS`` — a ragged column instead of a scannable one.
     """
     if flag == FLAG_CLIPPING:
         return (
@@ -365,7 +306,6 @@ def _evidence(flag: str, metrics: QualityMetrics) -> str:
         )
     if flag == FLAG_LOW_VOLUME:
         return f"active_rms={metrics.active_rms_dbfs:.{DBFS_DP}f}dBFS"
-    # `flags` only ever holds names from :data:`FLAGS`, and the vocabulary is exactly three, so the
-    # remaining case is duration. A fourth flag would be an ADR-0007 change, and this cascade is
-    # one of the places that would have to change with it.
+    # The vocabulary is exactly three (ADR-0007), so the remaining case is duration; a fourth flag
+    # would have to extend this cascade.
     return f"duration={metrics.duration_s:.{SECONDS_DP}f}s"

@@ -1,27 +1,17 @@
 """The effective config: defaults, validation, and the one canonical serialization.
 
-This module is the single seam through which config reaches the rest of the tool. It bakes a
-default for every knob, folds in an optional ``--config`` TOML override, and hands back an
-immutable :class:`Config`. Two facts about it are load-bearing:
+The single seam through which config reaches the rest of the tool: bake a default for every knob,
+fold in an optional ``--config`` TOML override, hand back an immutable :class:`Config`. Two facts
+are load-bearing. Ratio validation lives here, not in the splitter: :func:`load_config` runs on both
+commands, so ``validate`` catches a bad ratio even though splitting is later — without it the
+green-preflight guarantee (ADR-0007) would be false. And the config serializes exactly once, via
+:meth:`Config.canonical_json`, whose bytes feed both the ``dataset_version`` preimage (ADR-0010) and
+``dataset.json``'s ``config`` block, so the two cannot drift. The byte format is
+:mod:`sdw.serialization`'s, imported like any other writer imports it (#54).
 
-- **Ratio validation lives here, not in the splitter.** ADR-0007 stops ``validate`` at the
-  quality stage, while splitting is later; if an illegal ratio were only caught in the splitter,
-  ``validate`` could never catch it and the spec's guarantee — a green preflight means ``build``
-  will not hard-error on anything derivable from ``--data-in`` or ``--config`` — would be false.
-  So :func:`load_config` runs on both commands and rejects a bad ratio up front.
-- **The config serializes exactly once**, via :meth:`Config.canonical_json`. Those bytes feed
-  both the ``dataset_version`` preimage (ADR-0010) and ``dataset.json``'s ``config`` block, so
-  the two cannot drift. :meth:`Config.canonical_dict` exposes the same structure for a consumer
-  that embeds it in a larger document, serialized with :data:`~sdw.serialization.JSON_SEPARATORS` +
-  ``sort_keys`` so the embedded subtree stays byte-identical to the standalone form.
-
-The *byte format* those bytes are written in is not this module's to decide: it belongs to every
-artifact the tool emits, not just to the config, so it lives in :mod:`sdw.serialization` and is
-imported here like any other writer imports it (#54).
-
-Three sections only — ``[manifest]`` (ADR-0006), ``[quality]`` (ADR-0007), ``[split]``
-(ADR-0004). There is deliberately no ``[normalize]`` and no ``[images]`` (ADR-0005/0011): either
-would fold into the preimage and mint new Dataset identities for byte-identical Manifests.
+Three sections only — ``[manifest]`` (ADR-0006), ``[quality]`` (ADR-0007), ``[split]`` (ADR-0004).
+No ``[normalize]`` or ``[images]``: either would fold into the preimage and mint new Dataset
+identities for byte-identical Manifests (ADR-0005/0011).
 """
 
 import json
@@ -33,8 +23,7 @@ from typing import Any
 from sdw.errors import HardError
 from sdw.serialization import JSON_ENSURE_ASCII, JSON_SEPARATORS
 
-# Ratios must sum to 1.0; binary floats make 0.8 + 0.1 + 0.1 land a hair off, so compare with a
-# small absolute tolerance rather than for exact equality.
+# Ratios must sum to 1.0; binary floats land 0.8 + 0.1 + 0.1 a hair off, so compare with tolerance.
 RATIO_SUM_TOLERANCE = 1e-9
 
 
@@ -49,9 +38,8 @@ class ManifestConfig:
 class QualityConfig:
     """``[quality]`` (ADR-0007) — the four quality knobs; all fold into the preimage.
 
-    Three of the four gate an advisory flag (``low_volume``, and duration min/max →
-    ``duration_out_of_range``); ``silence_threshold_dbfs`` gates the silence *measurement*, which
-    is report-only and raises no flag. The v0.1 flag vocabulary is exactly three (ADR-0007).
+    Three gate a flag; ``silence_threshold_dbfs`` gates the report-only silence measurement, which
+    raises none (ADR-0007).
     """
 
     silence_threshold_dbfs: float = -40.0
@@ -81,8 +69,8 @@ class Config:
     def canonical_json(self) -> str:
         """The one canonical serialization: keys sorted, defaults materialized, UTF-8, compact.
 
-        These exact bytes are what the ``dataset_version`` preimage hashes and what
-        ``dataset.json`` records, so the identity and its record cannot disagree.
+        These exact bytes feed both the ``dataset_version`` preimage and ``dataset.json``
+        (ADR-0010), so the identity and its record cannot disagree.
         """
         return json.dumps(
             {
@@ -98,19 +86,15 @@ class Config:
     def canonical_dict(self) -> dict[str, Any]:
         """The config as a nested dict for embedding in ``dataset.json``'s ``config`` block.
 
-        Derived from :meth:`canonical_json` rather than from the dataclass directly, so its keys
-        iterate in the same sorted order as the canonical bytes. Serializing this dict with
-        :data:`~sdw.serialization.JSON_SEPARATORS` + ``sort_keys`` therefore reproduces the
-        preimage's ``config`` bytes exactly — the two records cannot drift.
+        Derived from :meth:`canonical_json`, not the dataclass, so re-serializing it with
+        ``sort_keys`` reproduces the preimage's ``config`` bytes exactly — the two cannot drift.
         """
         result: dict[str, Any] = json.loads(self.canonical_json())
         return result
 
 
-# Which keys each section owns, derived straight from the dataclass fields so the allowlist can
-# never drift from the knobs themselves. A key outside its section's set — or a section outside
-# this map — is a structural config error, so a typo or a would-be [normalize]/[images] knob
-# aborts loudly rather than being silently ignored (and silently absent from the preimage).
+# Each section's keys, from the dataclass fields so the allowlist can't drift from the knobs.
+# An unknown key or section aborts loudly rather than being silently absent from the preimage.
 _SECTION_KEYS: dict[str, frozenset[str]] = {
     "manifest": frozenset(f.name for f in fields(ManifestConfig)),
     "quality": frozenset(f.name for f in fields(QualityConfig)),
@@ -175,8 +159,7 @@ def _load_manifest(table: dict[str, Any]) -> ManifestConfig:
 
 
 def _is_iso_639_1(code: str) -> bool:
-    # Format check only: exactly two lowercase ASCII letters. This rejects "EN", "eng", and
-    # "english" without dragging in the full 184-code registry, which v0.1 does not need.
+    # Format check only: two lowercase ASCII letters, not the full 184-code registry.
     return len(code) == 2 and code.isascii() and code.islower() and code.isalpha()
 
 
