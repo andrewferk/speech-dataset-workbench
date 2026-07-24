@@ -1,6 +1,6 @@
 """Canonical JSON byte format, shared by every artifact that writes JSON (ADR-0006, #54).
 
-Load-bearing: exact goldens (ADR-0008), Manifest bytes hashed into dataset_version (ADR-0010).
+Byte format is load-bearing: goldens (ADR-0008), dataset_version (ADR-0010).
 """
 
 import json
