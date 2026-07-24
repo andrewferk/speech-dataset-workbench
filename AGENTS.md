@@ -13,3 +13,7 @@ The five canonical triage roles, using their default label strings. See `docs/ag
 ### Domain docs
 
 Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.
+
+### Code comments
+
+Trace, don't restate: cite ADRs by tag, keep code to the constraint. See `docs/agents/code-comments.md`.
