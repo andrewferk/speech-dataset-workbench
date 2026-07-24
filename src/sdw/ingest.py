@@ -1,29 +1,16 @@
 """Read ``recordings.csv``, resolve the Originals, and derive content identity (#24).
 
-The first pipeline stage after preflight. The operator hand-authors one ``recordings.csv`` at the
-``--data-in`` root and arranges the Originals in any subdirectory layout they like; this module
-reads that index, resolves each declared path, and turns every row into a :class:`Recording`
-carrying the content-derived ids ADR-0001 fixes. Structural problems raise :class:`HardError`
-(non-zero exit, no durable output — ADR-0002/0003); a clean input returns the Recordings.
+The first pipeline stage after preflight: parse the operator's ``recordings.csv``, resolve each
+declared path, and turn every row into a :class:`Recording` carrying the content-derived ids
+ADR-0001 fixes. Structural problems raise :class:`HardError` (non-zero exit, no durable output —
+ADR-0002/0003); a clean input returns the Recordings.
 
-Three facts pin the shape:
-
-- **Identity is content, not the row.** ``recording_id``/``content_hash`` hash the Original file
-  *bytes* and ``prompt_id`` hashes the normalized Prompt *text* (ADR-0001), so byte-identical
-  Originals collapse to one Recording and the same Prompt deduplicates across Sessions. Nothing
-  here decodes the audio: this stage only reads bytes. ADR-0005 frames decodability as *the ingest
-  gate*, but the actual decode lands in normalization — a later ticket — which both ``build`` and
-  ``validate`` reach, so the gate still fires; it simply is not this stage. This stage's "ingest"
-  is narrower than ADR-0005's: parse, resolve, identify.
-
-- **``--data-in`` is the operator's drop, not something the tool polices.** Files present under
-  ``--data-in`` but absent from the CSV are silently ignored — the CSV, not the directory, is the
-  authority on which Originals make up the Dataset, so there is nothing to warn about (#24).
-
-- **Byte-identical Originals with conflicting metadata abort.** Two rows whose Originals hash the
-  same collapse to one ``recording_id`` and one audio path; if they disagree on any manifest-bearing
-  field they would imply two conflicting Manifest lines, so the run aborts rather than silently pick
-  one (ADR-0013). Byte-identical rows that *agree* collapse to one Recording, as ADR-0001 requires.
+Identity is content, not the row: the ids hash the Original *bytes* and the normalized Prompt *text*
+(ADR-0001), so byte-identical Originals collapse and a shared Prompt deduplicates across Sessions.
+Nothing here decodes the audio — the decode gate of ADR-0005 fires later in normalization, which
+both ``build`` and ``validate`` reach; this stage's "ingest" is narrower: parse, resolve, identify.
+The CSV, not the ``--data-in`` directory, is the authority on membership, so Originals absent from
+it are silently ignored (#24). Byte-identical Originals whose metadata conflicts abort (ADR-0013).
 """
 
 import csv
@@ -35,17 +22,15 @@ from pathlib import Path, PurePosixPath
 
 from sdw.errors import HardError
 
-# Fixed name at the --data-in root — not configurable (#24). The operator authors exactly this.
+# Fixed name at the --data-in root — not configurable (#24).
 RECORDINGS_CSV = "recordings.csv"
 
-# The exact column set (#24, ADR-0006). Order in the file is free (RFC-4180 does not fix it); the
-# set must match — a missing column, or an unexpected one, is a structural error.
+# The exact column set (#24, ADR-0006). File order is free; a missing or unexpected column aborts.
 COLUMNS = ("path", "speaker_id", "session_id", "prompt_text", "device", "environment")
 
-# The manifest-bearing fields that must agree when two rows share one Original. A Recording's
-# identity is its bytes (ADR-0001), not these — they are what has to match for the collapse to be
-# unambiguous. ``path`` is excluded on purpose: two *different* paths pointing at byte-identical
-# bytes is the collapse case, not a conflict (ADR-0001/0013).
+# The manifest-bearing fields that must agree when two rows share one Original (ADR-0013). ``path``
+# is excluded: two different paths at byte-identical bytes is the collapse case, not a conflict
+# (ADR-0001).
 _AGREEMENT_FIELDS = ("speaker_id", "session_id", "prompt_text", "device", "environment")
 
 
@@ -53,10 +38,9 @@ _AGREEMENT_FIELDS = ("speaker_id", "session_id", "prompt_text", "device", "envir
 class Recording:
     """One resolved Recording: its content-derived ids plus the metadata carried from the CSV.
 
-    ``path`` is the POSIX-relative path as declared, kept relative so a ``--data-in`` set stays
-    portable; a later stage joins it under ``--data-in`` to read the Original. ``recording_id`` and
-    ``content_hash`` are two views of the same ``sha256`` over the Original bytes; ``prompt_id`` is
-    the ``sha256`` over the normalized Prompt text (ADR-0001).
+    ``path`` is the declared POSIX-relative path, kept relative so a ``--data-in`` set stays
+    portable. ``recording_id``/``content_hash`` are two views of the ``sha256`` over the Original
+    bytes; ``prompt_id`` is the ``sha256`` over the normalized Prompt text (ADR-0001).
     """
 
     recording_id: str
@@ -108,8 +92,8 @@ def _check_columns(fieldnames: Sequence[str] | None) -> None:
 
 
 def _check_row(row: dict[str, str | None], line: int) -> dict[str, str]:
-    # A ragged row: DictReader pads a short row with None and collects a long row's overflow under
-    # the None key. Either way the row does not match the header — a malformed CSV, so abort.
+    # DictReader pads a short row with None and collects a long row's overflow under the None key;
+    # either way the row does not match the header, so abort.
     if None in row:
         raise HardError(f"{RECORDINGS_CSV} line {line}: more fields than the header declares")
     for column in COLUMNS:
@@ -141,10 +125,9 @@ def _resolve_row(data_in: Path, row: dict[str, str]) -> Recording:
 def _check_path(raw: str) -> PurePosixPath:
     """Validate a declared ``path``: non-empty, POSIX, relative, and within ``--data-in``.
 
-    An absolute path or a ``..`` component would let a ``--data-in`` set reach outside itself,
-    breaking the self-contained portability the layout promises (#24), so either aborts. A
-    backslash is rejected too: on POSIX it is a literal filename character, so a Windows-style
-    separator would not resolve as intended and is not portable.
+    An absolute path or a ``..`` component would let a ``--data-in`` set reach outside itself (#24),
+    so either aborts. A backslash is rejected too: on POSIX it is a literal filename character, not
+    a separator.
     """
     if not raw:
         raise HardError(f"{RECORDINGS_CSV}: empty path")
@@ -171,10 +154,10 @@ def _prompt_id(prompt_text: str) -> str:
 def _collapse(recordings: list[Recording]) -> list[Recording]:
     """Collapse byte-identical Originals to one Recording; abort if their metadata conflicts.
 
-    Rows are grouped by ``content_hash`` (the full hash, not the truncated ``recording_id``). Within
-    a group every manifest-bearing field must agree: agreement means one true Recording seen twice
-    (ADR-0001), disagreement means two conflicting Manifest lines hiding behind one audio path
-    (ADR-0013) — ambiguous input, so abort. First-occurrence order is preserved.
+    Grouped by ``content_hash`` (the full hash, not the truncated ``recording_id``). Agreement on
+    every manifest-bearing field means one Recording seen twice (ADR-0001); disagreement means two
+    conflicting Manifest lines behind one audio path (ADR-0013), so abort. First-occurrence order
+    is preserved.
     """
     by_hash: dict[str, Recording] = {}
     for recording in recordings:
