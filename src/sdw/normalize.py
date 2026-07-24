@@ -22,13 +22,12 @@ from sdw.errors import HardError
 TARGET_SAMPLE_RATE = 16000
 TARGET_SUBTYPE = "PCM_16"
 
-# "PCM WAV" is two independent conditions libsndfile reports separately (ADR-0005): the container is
-# a RIFF WAV form (WAV/WAVEX/RF64), and the encoding is a PCM_ subtype — an MP3/ULAW/ADPCM or
-# FLOAT/DOUBLE payload in a WAV wrapper is not. Widening either set is an ADR change.
+# "PCM WAV" is two independent checks libsndfile reports separately (ADR-0005): the container is a
+# RIFF WAV form, and the encoding is a PCM_ subtype. Widening either set is an ADR change.
 _WAV_FORMATS = frozenset({"WAV", "WAVEX", "RF64"})
 _PCM_SUBTYPE_PREFIX = "PCM_"
 
-# soxr's HQ band-limited resampler, chosen over scipy on quality (ADR-0005).
+# soxr's band-limited "HQ" resampler (ADR-0005).
 RESAMPLE_QUALITY = "HQ"
 
 
@@ -105,8 +104,7 @@ def _downmix(samples: npt.NDArray[np.float64]) -> npt.NDArray[np.float64]:
 def _resample(samples: npt.NDArray[np.float64], sample_rate: int) -> npt.NDArray[np.float64]:
     """Resample to 16 kHz with soxr ``HQ`` (ADR-0005); skipped when the input is already 16 kHz.
 
-    The skip is not an optimization: it keeps an already-conforming Original bit-exact rather than
-    pushing it through a needless FFT round-trip.
+    The skip is not an optimization — it keeps an already-conforming Original bit-exact.
     """
     if sample_rate == TARGET_SAMPLE_RATE:
         return samples

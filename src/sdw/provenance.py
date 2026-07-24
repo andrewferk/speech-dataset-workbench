@@ -84,8 +84,7 @@ def build_provenance(config: Config, dataset: Dataset) -> Provenance:
 
     The config is serialized **once**, into ``canonical`` below, and that one string feeds both the
     preimage and the descriptor's ``config`` block, so identity and record cannot disagree — what
-    makes the id recomputable from ``--data-out`` alone (ADR-0010), which is why #8's spine kept two
-    commands and no `verify`.
+    makes the id recomputable from ``--data-out`` alone (ADR-0010, #8).
     """
     canonical = config.canonical_json()
     version = _version_of(canonical, dataset.files, __version__)
