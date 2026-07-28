@@ -17,3 +17,7 @@ Single-context: `CONTEXT.md` and `docs/adr/` at the repo root. See `docs/agents/
 ### Code comments
 
 Trace, don't restate: cite ADRs by tag, keep code to the constraint. See `docs/agents/code-comments.md`.
+
+### Adversarial review
+
+Reviewer model `cursor-grok-4.5-high`, max `2` rounds. See `docs/agents/adversarial-review.md`.
