@@ -2,7 +2,8 @@
 
 A local-first, CLI-only tool that turns a collection of **prompted** speech recordings into a
 validated, reproducible, versioned dataset with an HF/NeMo-friendly manifest. This glossary is the
-ubiquitous language for v0.1; it is a glossary only — no implementation details.
+ubiquitous language for v0.1's dataset build and v0.2's evaluation of a model against it; it is a
+glossary only — no implementation details.
 
 ## Language
 
@@ -45,17 +46,22 @@ The deterministic derived audio produced from an Original: **mono, 16 kHz, 16-bi
 downmix-by-mean → soxr `HQ` resample → `PCM_16`, with **no loudness change and no dither**
 (exact procedure and determinism guarantees pinned by ADR-0005). Also called *derived* audio.
 _Avoid_: Processed, converted, output.
+_Note_: Unqualified **Normalization** / **Normalized** always means this audio transform. The
+text-shaping applied before Scoring is **Text Normalization**, never shortened (ADR-0015).
 
 ### Annotation
 
 **Intended text**:
 What the Speaker was asked to say — the Prompt text. Collected in v0.1.
-_Avoid_: Reference, ground truth, label.
+_Avoid_: Reference **as another name for this text**, ground truth, label. (**Reference** is
+separately defined below as an evaluation *role* — the side a Hypothesis is measured against — which
+the Intended text happens to fill in v0.2. Amended by ADR-0015.)
 
 **Perceived text**:
 What a listener judges was actually said. A reserved schema slot in v0.1 — **not collected**, no
 annotation flow. Named here so the dual-annotation model is explicit.
 _Avoid_: Transcript, actual text, hypothesis.
+_See_: Hypothesis (below) — machine-emitted text is a Hypothesis and may **never** fill this slot.
 
 ### Dataset
 
@@ -148,3 +154,103 @@ _Avoid_: Location, background, scene.
 **Device**:
 The capture hardware used for a Session (e.g. a specific microphone). An attribute of the Session.
 _Avoid_: Mic, hardware, equipment.
+
+### Evaluation
+
+Introduced in v0.2. Every term here names something on the model side of the tool; nothing in this
+section may alter a Dataset, a Manifest, or a Quality flag.
+
+**Evaluation**:
+Measuring how well a model transcribes a Dataset Version's audio — Transcription followed by
+Scoring. A measurement an operator reads, never a judgment fed back into the Dataset.
+_Avoid_: Benchmarking, testing, validation (that names v0.1's `validate` command — a different act).
+_See_: ADR-0015 (evaluation vocabulary).
+
+**Transcription**:
+The act of running a model over a Sample's Normalized audio to produce a Hypothesis. **Attributed,
+not reproducible**: its output is not guaranteed identical across runs, so it is stamped with the
+provenance that identifies it instead. Its runtime knobs are *decode parameters* — "decoding" names
+those knobs, never the whole act.
+_Avoid_: Inference, recognition, prediction, decoding (narrower — see above).
+
+**Hypothesis**:
+The text a model emits for one Sample. **Never** a Perceived text: that slot is a human judgment and
+machine output may not occupy it.
+_Avoid_: Transcript, perceived text, prediction, guess.
+
+**Hypothesis Record**:
+The durable artifact Transcription emits — one line per transcribed Sample carrying its Hypothesis,
+alongside the provenance of the Run that produced it. Retained unmodified so Scoring can be re-run
+against it without re-running the model, the same relationship an Original has to its Normalized
+audio.
+_Avoid_: Cache, transcript file, hypothesis artifact ("artifact" is a category word here, not a name).
+
+**Scoring**:
+The derivation of Metrics from a Hypothesis Record and its References — **pure and byte-identical**
+across machines, with no model and no audio involved.
+_Avoid_: Measurement, grading, judging.
+
+**Reference**:
+The **role** a text plays in Scoring: the side a Hypothesis is measured against. It is a position in
+a comparison, not a claim of correctness, and an Evaluation Report always names which text filled
+it. In v0.2 that is the Intended text — so a Metric conflates recognition error with speaker
+deviation, and the Report must say so.
+_Avoid_: Ground truth, label, gold.
+
+**Text Normalization**:
+The deterministic text-shaping applied to **both** Reference and Hypothesis before they are
+compared. Always written with "Text": unqualified **Normalization** means ADR-0005's audio transform
+and nothing else.
+_Avoid_: Normalization (unqualified), cleaning, preprocessing.
+
+**Normalizer**:
+A named, versioned rule-set that performs Text Normalization. Named because there is no single
+canonical one — widely-used normalizers share a class name yet produce different numbers — so an
+Evaluation Report must state which one it used.
+_Avoid_: Cleaner, filter, preprocessor.
+
+**Metric**:
+A named measure Scoring derives from Reference/Hypothesis pairs — word error rate (WER), character
+error rate (CER), sentence error rate (SER). An error rate is not a proportion of a whole and is
+**never clamped**: a Metric above 1.0 is a real, reportable result.
+_Avoid_: Score (reserved — Scoring is the act, and "score" invites a verdict reading), accuracy.
+
+**Pooled**:
+The aggregation that sums errors and Reference lengths across a group and divides **once**.
+_Avoid_: Total, overall, corpus average.
+
+**Macro-average**:
+The aggregation that averages per-Sample Metrics, weighting every unit equally. Legitimate for a
+Breakdown, where groups differ in size on purpose; never presented unlabelled as "the WER", because
+it and Pooled can differ by several points on the same data.
+_Avoid_: Average, mean (unqualified).
+
+**Evaluation Scope**:
+The set of Samples one Run covers, fixed by a Split selection. The unit inside a Scope is a
+**Sample**, unchanged — evaluation introduces no new unit, and pairing is by identifier, never by
+position.
+_Avoid_: Eval set, test set, subset.
+
+**Evaluation Run**:
+One execution of an Evaluation: one model over one Evaluation Scope of one Dataset Version, under
+one Normalizer and one set of decode parameters. Shortened to **Run**. Explicitly **not** a version —
+a Dataset Version is content-derived, reproducible, and recomputable from output alone, and a Run is
+none of those.
+_Avoid_: Version, snapshot, release, experiment.
+
+**Evaluation Report**:
+The emitted record of a Run: its Metrics, its Breakdowns, and the provenance attributing them. An
+operator-facing artifact, like the Quality report — the Manifest carries no evaluation fields, and
+Evaluation output never lands in `--data-out`.
+_Avoid_: Results, scorecard, summary.
+
+**Breakdown**:
+A Metric computed over a group of Samples sharing an attribute value — one Session, one Prompt, one
+Device, one Environment. A diagnostic view of a **single** Run's numbers, never a comparison between
+Runs.
+_Avoid_: Slice, segment, cut, comparison.
+
+**Baseline**:
+The Evaluation Report of an **unmodified**, off-the-shelf model over a Dataset Version — the number
+later work is measured against. Only meaningful alongside the Reference and Normalizer it names.
+_Avoid_: Benchmark (implies a shared public leaderboard; a Baseline is local).

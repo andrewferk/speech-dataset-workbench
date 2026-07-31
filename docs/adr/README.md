@@ -1,7 +1,7 @@
 # Decision records
 
-Fourteen architecture decision records, one per decision that shaped v0.1. Each states what was
-decided and why, and — usually at greater length — what was considered and rejected, so a reader
+Fifteen architecture decision records — 0001–0014 shaped v0.1, and 0015 opens v0.2. Each states what
+was decided and why, and — usually at greater length — what was considered and rejected, so a reader
 who disagrees can find out whether their objection was already answered.
 
 They are **immutable once decided**. A decision that changes is not edited away; the correction is
@@ -43,3 +43,4 @@ is the one place where reading the ADR alone leaves you with a rule the repo no 
 | [0012](0012-v0-1-acceptance-criteria.md) | v0.1 is done when CI is green, three checks pass (examples build, privacy allowlist, audit recipe), a human has walked the example once, and `v0.1.0` is tagged — with no ADR-indexed checklist, which would be a second source of truth. | ADR-0014, in place |
 | [0013](0013-recordings-csv-ingest-and-duplicate-resolution.md) | A fixed six-column `recordings.csv` is the authority on what the Dataset contains; paths stay relative and inside `--data-in`, and byte-identical Originals collapse when their metadata agrees and abort when it conflicts. | |
 | [0014](0014-build-backend-and-installed-entry-point.md) | A `hatchling` build backend, so `uv sync` installs the package and the entry point is `sdw` — removing the four unchecked copies of `PYTHONPATH=src`. | |
+| [0015](0015-evaluation-vocabulary.md) | Evaluation's vocabulary: Transcription is attributed and emits a Hypothesis Record, Scoring is reproducible and derives Metrics; `Reference` narrows to a role, `Normalization` stays audio-only, and a Run is deliberately not a Version. | |
