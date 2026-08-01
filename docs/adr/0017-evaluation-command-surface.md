@@ -46,7 +46,7 @@ It resolves for two commands on four arguments, in descending strength:
   `transcribe` and `score` mean the CLI, the ADRs and `CONTEXT.md` share one word list, with no
   translation at the boundary where mistranslation is costliest.
 - **Re-scoring is the common path, not the rare one.** #128 put the 95% CI at 6–11 points wide at 12
-  utterances, and identified paired re-scoring of one Hypothesis Record as the one comparison that
+  Samples, and identified paired re-scoring of one Hypothesis Record as the one comparison that
   survives it. That workflow should be the shortest command in the tool, not a cache hit.
 
 Two costs are accepted on the record. The happy path is **two invocations**, not one. And #8's
@@ -75,9 +75,9 @@ The corollary is that a **Scope flag on `transcribe` would be a flag whose only 
 defeat the argument justifying the design.** If narrowing at Transcription is available, the
 superset property holds only when the operator declined the convenience, and the v0.3 payoff
 evaporates exactly when it is needed. The wall-clock saving it buys is single-digit minutes on a
-12–100 utterance corpus of ≤20 s clips.
+Dataset of 12–100 Samples of ≤20 s each.
 
-When a corpus does grow large enough for a full Transcription to hurt, the answer is **resumption** —
+When a Dataset does grow large enough for a full Transcription to hurt, the answer is **resumption** —
 an append-safe Hypothesis Record where a re-run skips Samples already transcribed under identical
 provenance — not Scope selection. That is a different mechanism, it belongs to the Record's format,
 and building `--split` now would be paying for a worse version of it. Handed to #133.
@@ -278,7 +278,7 @@ wrapper never learns the seam exists, which is the thing the surface is meant to
 
 **`--split` on `transcribe`, for cost control** — the flag most likely to be missed. Rejected
 because its only effect is to produce partial Hypothesis Records, defeating the superset property
-that makes the whole design work, in exchange for minutes on a corpus of this size. Resumption is
+that makes the whole design work, in exchange for minutes on a Dataset of this size. Resumption is
 the right instrument for the real problem and is handed to #133.
 
 **Hard-coding `test` as the headline Metric** — the most defensible Baseline in the abstract, since
