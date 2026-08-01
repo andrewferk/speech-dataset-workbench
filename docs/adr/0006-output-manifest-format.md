@@ -185,7 +185,10 @@ preimage needs the same byte format) rather than owning it, because a JSONL join
 - **`device_id` / `environment_id`** — implies an id scheme that does not exist (ADR-0001 ids only
   prompt/recording/speaker/session); the `_id` suffix stays reserved for real id handles.
 - **Reserving `perceived_text` in docs only** — emitting `perceived_text: null` per line makes the
-  dual-annotation schema literal, so v0.2 populates it in place with no schema change.
+  dual-annotation schema literal, so a later version populates it in place with no schema change.
+  *(Amended by ADR-0017: this said "v0.2 populates it". v0.2 does not — evaluation may never write a
+  machine Hypothesis into a human slot, and `perceived_text` collection is out of v0.2's scope. The
+  slot stays `null` until human annotation exists.)*
 - **Bare-hex `content_hash`** — matches `sha256sum` output but leaves the algorithm implicit; the
   `sha256:` prefix is cheap self-description.
 - **Aggressive `prompt_id` normalization** (case-fold, strip punctuation) — risks merging Prompts

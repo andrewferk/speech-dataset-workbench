@@ -45,8 +45,9 @@ class Sample:
     audio_filepath: str
     duration: float
     text: str
-    # `None`, not `str | None`: v0.1 cannot carry a Perceived text, so populating the slot early
-    # fails type-checking. Widening to `str | None` is v0.2's first move (ADR-0006).
+    # `None`, not `str | None`: no Perceived text is collected yet, so populating the slot early
+    # fails type-checking. Widening waits for human annotation — v0.2 evaluates but may not write a
+    # machine Hypothesis here, and holds the slot at `None` (ADR-0017, amending ADR-0006).
     perceived_text: None
     prompt_id: str
     speaker_id: str
