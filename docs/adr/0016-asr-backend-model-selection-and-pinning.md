@@ -58,8 +58,10 @@ above rather than overlooked. #131 lists it among the factors to weigh, and both
 satisfy it: `faster-whisper` takes `local_files_only=` as a constructor argument, and the HF Hub
 honours `HF_HUB_OFFLINE=1` plus `local_files_only=True` on `from_pretrained`. Each reaches a
 fully-populated cache with the network down, so the criterion is met on both sides and decides
-nothing between them. The one runtime it *would* have decided against is `pywhispercpp`, whose
-downloader cannot pin a revision at all — recorded below.
+nothing between them. It does not discriminate anywhere else in the surveyed set either: every
+candidate loads from a local cache once the weights are present. #131 lists offline capability
+and provenance/pinning as separate factors, and they stay separate here — `pywhispercpp` is
+rejected below on pinning, which is not an offline failure.
 
 It also disposes of the one unresolved licensing question in #127. `faster-whisper` requires `av`,
 whose wheels bundle an FFmpeg built with `--enable-libx264 --enable-libx265` — codecs FFmpeg's own
@@ -213,7 +215,7 @@ The three network states are decided separately, because only one of them is an 
 | State | Outcome |
 | --- | --- |
 | Network, cold cache | Downloads at the pinned revision, announced. |
-| No network, warm cache | **Runs normally.** The pinned revision is a cache key, so an offline run at a cached sha is byte-identical to an online one; `HF_HUB_OFFLINE=1` is honoured and never overridden by this tool. |
+| No network, warm cache | **Runs normally.** The pinned revision is a cache key, so the cached sha names the same *weight bytes* the network would have served; `HF_HUB_OFFLINE=1` is honoured and never overridden by this tool. This is a claim about the weights loaded, **not** about the Hypotheses produced — Transcription stays attributed-not-reproducible whether the network is up or down. |
 | No network, cold cache | **Hard error** — ADR-0005's "if it does not decode, the build aborts" applied to a missing required input. |
 
 Pinning by sha is what makes the middle row safe: a revision that resolved to a tag or a branch
