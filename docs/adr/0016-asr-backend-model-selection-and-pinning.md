@@ -1,8 +1,8 @@
 # ASR backend, model selection & pinning (v0.2)
 
 v0.2 puts a model inside a tool that until now had none. Everything else on the evaluation map —
-the Hypothesis Record, the provenance record, the Evaluation Report's Breakdowns — is downstream of
-*which model, run how*, so this ADR fixes that first. It consumes research #127 (ASR runtime & model
+the Hypothesis Record and the Run provenance it carries, the Evaluation Report's Breakdowns — is
+downstream of *which model, run how*, so this ADR fixes that first. It consumes research #127 (ASR runtime & model
 landscape) and resolves #131.
 
 It builds on ADR-0005 (WAV-only ingest, mono/16 kHz/PCM_16 Normalized target, zero FFmpeg),
@@ -53,6 +53,14 @@ Three things decide it the other way, and the first is the one that matters:
   this project exists to learn, and CTranslate2 teaches CTranslate2. That the two considerations
   agree is why this choice is comfortable rather than a trade.
 
+**Offline capability does not discriminate**, which is why it is absent from the three reasons
+above rather than overlooked. #131 lists it among the factors to weigh, and both candidates
+satisfy it: `faster-whisper` takes `local_files_only=` as a constructor argument, and the HF Hub
+honours `HF_HUB_OFFLINE=1` plus `local_files_only=True` on `from_pretrained`. Each reaches a
+fully-populated cache with the network down, so the criterion is met on both sides and decides
+nothing between them. The one runtime it *would* have decided against is `pywhispercpp`, whose
+downloader cannot pin a revision at all — recorded below.
+
 It also disposes of the one unresolved licensing question in #127. `faster-whisper` requires `av`,
 whose wheels bundle an FFmpeg built with `--enable-libx264 --enable-libx265` — codecs FFmpeg's own
 `configure` refuses without `--enable-gpl`, though the flag is absent from the published build
@@ -101,7 +109,7 @@ for `str`/`bytes` inputs. Under the explicit API there is no path parameter to r
 ADR-0012's move again: make the wrong thing unrepresentable rather than forbidden.
 
 It also puts the decode parameters in our source rather than in a `generation_config.json` we do
-not control, so the call site and the provenance record quote the same constants.
+not control, so the call site and the Run's provenance quote the same constants.
 
 Audio is read as **float32** (not `soundfile`'s `float64` default; the extra precision buys nothing
 and every runtime casts it anyway).
@@ -132,21 +140,21 @@ not comparable at their defaults.
 **No repetition penalty, no `no_repeat_ngram_size`, no `max_new_tokens` cap.** A repetition penalty
 changes the model's output to flatter the metric, and this baseline exists to measure the unmodified
 model. A length cap buys little: Whisper is architecturally bounded at 448 decoder positions, so a
-runaway is already finite. Letting it run means a blown transcript surfaces as a WER above 1.0 —
+runaway is already finite. Letting it run means a blown Hypothesis surfaces as a WER above 1.0 —
 which ADR-0015 already forbids clamping and the Scoring spec (#132) must not either, precisely so
-the failure stays visible rather than tidied away. Runaway decoding on quiet or atypical audio is this corpus's likeliest failure mode;
-hiding it would be the wrong kindness.
+the failure stays visible rather than tidied away. Runaway decoding on quiet or atypical audio is
+this Dataset's likeliest failure mode; hiding it would be the wrong kindness.
 
 ### Language — from the manifest, defaulting to `"en"`, with its source recorded
 
 `language` is read from **`[manifest].lang`** (ADR-0006) and passed to `generate()`. When it is
-`null` — the v0.1 default — the effective value is **`"en"`**, and the provenance record carries
+`null` — the v0.1 default — the effective value is **`"en"`**, and the Run's provenance carries
 both the effective value and whether it was `declared` or `defaulted`.
 
 **Language detection is ruled out.** Its problem is not non-determinism — under greedy decoding with
 pinned weights, detection is an argmax over language tokens and answers the same way every time.
-The problem is that it makes the transcript depend on an input appearing nowhere in the provenance
-record, varying per-sample within one Run. On quiet, atypical or near-silent audio — the population
+The problem is that it makes the Hypothesis depend on an input appearing nowhere in the Run's
+provenance, varying per-Sample within one Run. On quiet, atypical or near-silent audio — the population
 this product exists for — mis-detection produces fluent garbage that lands in the report as
 *recognition error*, indistinguishable from it. That is the same silent inversion the map already
 rejected ASR-as-dataset-QA for.
@@ -187,7 +195,7 @@ no model at all.
 
 **CPU thread count is recorded, not pinned.** This is a deliberate inconsistency with the paragraph
 above and is named rather than hidden. Floating-point reductions are order-dependent and thread
-count changes the order, so two machines with different core counts produce different transcripts
+count changes the order, so two machines with different core counts produce different Hypotheses
 from identical inputs. But unlike device, thread count has no correct value: pinning to 1 costs
 several times the wall clock, and pinning to 4 is a number we invented with no reference run to
 match. The resolved value goes in the attribution, where a future comparison can check it.
@@ -198,8 +206,19 @@ input, but pinning `eager` would cost speed to fix a variance we have not observ
 ### Weights — fetched on demand at the pinned revision
 
 `from_pretrained(repo_id, revision=<sha>)` fetches only the files it needs. A first run downloads
-~1.6 GB and says so; subsequent runs hit the cache. **No network and no cache is a hard error** —
-ADR-0005's "if it does not decode, the build aborts" applied to a missing required input.
+~1.6 GB and says so; subsequent runs hit the cache.
+
+The three network states are decided separately, because only one of them is an error:
+
+| State | Outcome |
+| --- | --- |
+| Network, cold cache | Downloads at the pinned revision, announced. |
+| No network, warm cache | **Runs normally.** The pinned revision is a cache key, so an offline run at a cached sha is byte-identical to an online one; `HF_HUB_OFFLINE=1` is honoured and never overridden by this tool. |
+| No network, cold cache | **Hard error** — ADR-0005's "if it does not decode, the build aborts" applied to a missing required input. |
+
+Pinning by sha is what makes the middle row safe: a revision that resolved to a tag or a branch
+could name different bytes online than the ones already cached, and the offline run would be the
+one telling the truth.
 
 Cache location is **not** set by this tool: `HF_HOME` / `HF_HUB_CACHE` govern, per the ecosystem
 convention. Where that lands in packaging and `.gitignore` guidance belongs to #137.
@@ -229,9 +248,12 @@ Aborting was the tempting alternative and is rejected on ADR-0007's own logic: v
 dataset's own data over an internal detail of Whisper's window size has stopped being a
 stranger-consumer and started imposing its architecture on the dataset.
 
-### Model identity in the provenance record
+### Model identity in the Run's provenance
 
-#134 owns the record's overall shape. This ADR mandates the model-identifying fields within it:
+`CONTEXT.md` places the provenance of a Run on the **Hypothesis Record**, which carries it
+alongside each Hypothesis; "provenance record" is #134's working name for that field set, not a
+second artifact. #134 owns its shape and where it sits. This ADR mandates only the
+model-identifying fields within it:
 
 | Field | Value |
 | --- | --- |
@@ -260,7 +282,7 @@ need.
 - The size ladder and the v0.3 fine-tuned comparison both require an ADR amendment. Deliberate.
 - Every field the report needs to state its own conditions is fixed here: model, revision, licence,
   decode parameters, language and its source, device, dtype, thread count.
-- Nothing here makes transcription reproducible, and nothing here claims it is.
+- Nothing here makes Transcription reproducible, and nothing here claims it is.
 
 ## Rejected alternatives
 
@@ -326,7 +348,7 @@ the manifest's own `lang` field, and forecloses any non-English dataset without 
 Reading `lang` adds no knob; it consumes one v0.1 already has.
 
 **MPS, opportunistic or mandatory** — several times faster on this encoder-bound workload, which
-would matter if transcription were iterated. It is not: the Hypothesis Record makes it a
+would matter if Transcription were iterated. It is not: the Hypothesis Record makes it a
 run-once stage. Rejected for the documentation gap above.
 
 **Richer Hypothesis Record telemetry** — per-segment timestamps, token logprobs and confidence scores were
