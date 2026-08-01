@@ -232,8 +232,9 @@ them as bugs:
 
   > **Amended by #129.** What that contract *is*, post-tag, is now stated in
   > [ADR-0010](0010-dataset-version-and-provenance.md): it is **one-directional** — equal ids imply
-  > the same dataset, unequal ids imply nothing. v0.2 is the first release to change the tool without
-  > changing the build path, so it is the first to mint a new id for byte-identical manifest bytes.
+  > the same Dataset Version, unequal ids imply nothing. v0.2 is the first release to change the tool
+  > without changing the build path, so it is the first to mint a new id for byte-identical manifest
+  > bytes.
   > The churn is accepted. Note this is a *different* exception from the `uv.lock` one above, which
   > remains about dependencies; and that #129 ratifies rather than revises this ADR's refusal to
   > assert `dataset_version` in *Check 1 — the examples build*.

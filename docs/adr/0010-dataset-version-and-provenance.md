@@ -115,8 +115,8 @@ cross-machine stable at all. The scheme and ADR-0005 agree.
 > convention *"forced, not defective"* — but it accepted it under an assumption that has now expired.
 > Two arguments replace it:
 >
-> - **Direction of error.** Churn produces a false **no** to "are these the same dataset?" — you
->   look, diff the manifest bytes, and find they match. A stale id produces a false **yes** — you
+> - **Direction of error.** Churn produces a false **no** to "are these the same Dataset Version?" —
+>   you look, diff the manifest bytes, and find they match. A stale id produces a false **yes** — you
 >   never look. This ADR exists to make false-yes unrepresentable (the `recordings.csv` metadata-edit
 >   collision above). Every alternative below trades a safe false-no for a risky false-yes.
 > - **The forcing event.** Bumping `tool_version` is compelled by the release itself: you cannot tag
@@ -133,9 +133,9 @@ cross-machine stable at all. The scheme and ADR-0005 agree.
 >
 > **The contract is therefore one-directional, from the tag onward:**
 >
-> - **Equal ids ⟹ the same dataset.** Preserved in full; this is what the preimage is for.
-> - **Unequal ids ⟹ nothing.** Two datasets with different ids may be byte-identical, differing only
->   in which tool version built them.
+> - **Equal ids ⟹ the same Dataset Version.** Preserved in full; this is what the preimage is for.
+> - **Unequal ids ⟹ nothing.** Two Dataset Versions with different ids may be byte-identical,
+>   differing only in which tool version built them.
 >
 > ADR-0012 closed its pre-tag exception with *"the id's contract begins at the tag"* but never said
 > what that contract was, because before v0.2 there was no way for the second half to fail. This is
