@@ -104,6 +104,74 @@ therefore byte-exact on every machine. It was never a claim about the *Normalize
 ADR-0005 already says those are not cross-arch reproducible — an id that covered them could not be
 cross-machine stable at all. The scheme and ADR-0005 agree.
 
+> **Amended by #129 — the id's post-tag contract, and why release churn is accepted.**
+>
+> This ADR reasoned about `tool_version` for a tool where *every* release was a build-path release,
+> so it never asked what happens when one is not. v0.2 is the first: it adds an evaluation path that
+> `sdw.pipeline` cannot reach, and tagging `v0.2.0` therefore mints a **new `dataset_version` for
+> byte-identical manifest bytes**, produced by a build path that did not change a line.
+>
+> **That churn is accepted.** ADR-0012 already accepted a version of it, calling the lock-bump
+> convention *"forced, not defective"* — but it accepted it under an assumption that has now expired.
+> Two arguments replace it:
+>
+> - **Direction of error.** Churn produces a false **no** to "are these the same Dataset Version?" —
+>   you look, diff the manifest bytes, and find they match. A stale id produces a false **yes** — you
+>   never look. This ADR exists to make false-yes unrepresentable (the `recordings.csv` metadata-edit
+>   collision above). Every alternative below trades a safe false-no for a risky false-yes.
+> - **The forcing event.** Bumping `tool_version` is compelled by the release itself: you cannot tag
+>   `v0.2.0` without it. A separate build-path version has **no forcing event** — nothing in the
+>   release process makes anyone ask "did this touch the build path?" — so its failure mode is
+>   forgetting, silently, in the dangerous direction.
+>
+> And `tool_version` is not redundant with hashing the manifest. The manifest bytes cover every
+> manifest change *directly*; `tool_version` is the only way the tool's **own code and constants**
+> enter the id at all — ADR-0005's normalization constants, which have no config section to hash and
+> which the paragraph above notes "ride in via `tool_version`"; the quality math behind
+> `reports/quality.jsonl`; the emission logic itself. It does **not** cover third-party library
+> bumps: that residual is disclaimed immediately above and left to the lock-bump convention.
+>
+> **The contract is therefore one-directional, from the tag onward:**
+>
+> - **Equal ids ⟹ the same Dataset Version.** Preserved in full; this is what the preimage is for.
+> - **Unequal ids ⟹ nothing.** Two Dataset Versions with different ids may be byte-identical,
+>   differing only in which tool version built them.
+>
+> ADR-0012 closed its pre-tag exception with *"the id's contract begins at the tag"* but never said
+> what that contract was, because before v0.2 there was no way for the second half to fail. This is
+> it. The practical consequence: **a differing `dataset_version` is not evidence the data changed.**
+> When two ids differ and it matters, diff the manifest bytes — cheap, definitive, and the thing the
+> id was never a substitute for.
+>
+> **Nothing changes.** No code, no config, no new field; `dataset.json` is untouched. In particular
+> there is **no stability test**: ADR-0012's examples check already declines to assert
+> `dataset_version` because "the preimage includes `tool_version`, so every version bump would break
+> it", and that refusal is now a consequence of an accepted contract rather than nuisance-avoidance.
+>
+> **One `tool_version` concept, two occurrences.** Where `--data-out` is kept durable across releases,
+> a `v0.1.0`-built dataset scored by `v0.2.x` is the normal case, not an edge case. `dataset.json`'s
+> `tool_version` names **the tool that built the dataset**; an evaluation run record names **the tool
+> that scored it**, separately. These will routinely disagree, and the disagreement is a fact to
+> record rather than reconcile — `tool_version` is not split, and no new version string is minted.
+>
+> **Considered and rejected:**
+>
+> - **A separate build-path version, distinct from `tool_version`** — precise in principle; loses to
+>   the forcing-event argument, and adds a second unenforced hand-convention where this ADR already
+>   tolerates one.
+> - **Hashing only the modules that can affect the manifest** — mechanically automatic, no judgement
+>   call, but it needs a hand-maintained module list that rots (the objection this ADR already raises
+>   against an enumerated field list and against a "deps that matter" list), and it would churn the id
+>   on comment and formatting changes.
+> - **Declaring `dataset_version` stable across releases that do not touch the build path, enforced
+>   by a test** — self-contradictory while `tool_version` is a hash input.
+> - **Dropping `tool_version` and bumping the `sdw-dataset-version/1` scheme separator when the build
+>   path changes** — the sharpest form of the objection, and strictly *less* machinery than today
+>   rather than more: it collapses two hand-bumped strings into the one that already exists. Rejected
+>   on the forcing event alone. The separator versions the *recipe* and is bumped by whoever rewrites
+>   the recipe — a narrow, self-evident trigger; retargeting it at "any build-path change" hands a far
+>   broader question to a string with nothing in the release process behind it.
+
 ### Format
 
 `dataset_version` is written as **`sha256:` + the full 64 hex digits**, matching `content_hash`.

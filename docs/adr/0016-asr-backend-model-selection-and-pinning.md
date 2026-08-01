@@ -1,19 +1,19 @@
 # ASR backend, model selection & pinning (v0.2)
 
 v0.2 puts a model inside a tool that until now had none. Everything else on the evaluation map —
-the hypothesis artifact, the provenance record, the report's breakdowns — is downstream of *which
-model, run how*, so this ADR fixes that first. It consumes research #127 (ASR runtime & model
+the Hypothesis Record, the provenance record, the Evaluation Report's Breakdowns — is downstream of
+*which model, run how*, so this ADR fixes that first. It consumes research #127 (ASR runtime & model
 landscape) and resolves #131.
 
 It builds on ADR-0005 (WAV-only ingest, mono/16 kHz/PCM_16 Normalized target, zero FFmpeg),
 ADR-0006 (`[manifest].lang`), ADR-0007 (quality flags are advisory; `duration_max_s` is
-configurable) and ADR-0010 (`dataset_version` covers manifest bytes and effective config). It
-amends none of them. Every ADR written for v0.1 assumed no model ever runs in this tool; that
-assumption ends here, and the isolation this ADR specifies is what keeps it true of the `build`
-path.
+configurable), ADR-0010 (`dataset_version` covers manifest bytes and effective config) and
+ADR-0015 (evaluation vocabulary, whose terms this ADR uses throughout). It amends none of them.
+Every ADR written for v0.1 assumed no model ever runs in this tool; that assumption ends here, and
+the isolation this ADR specifies is what keeps it true of the `build` path.
 
 The reproducibility contract splits in two, and this ADR sits entirely on the non-reproducible
-side: transcription is **attributed, not reproducible**. No runtime surveyed in #127 documents
+side: Transcription is **attributed, not reproducible**. No runtime surveyed in #127 documents
 reproducibility at all — PyTorch disclaims it across releases, commits and platforms in writing.
 That is not a concession to be worked around; it is the only honest position available, and it
 makes the job here *removing every variance that can be removed and disclosing the rest*, rather
@@ -68,7 +68,7 @@ licence   mit
 ```
 
 The checkpoint is a **source constant, not configuration, and not a CLI argument** — the same
-posture ADR-0005 took toward the normalization procedure. One run evaluates one model.
+posture ADR-0005 took toward the Normalization procedure. One Run evaluates one model.
 
 Two properties beyond accuracy decided the checkpoint. It is the **only** Whisper checkpoint whose
 HF card (`mit`) agrees with the openai/whisper README's claim that "Whisper's code and model
@@ -133,8 +133,8 @@ not comparable at their defaults.
 changes the model's output to flatter the metric, and this baseline exists to measure the unmodified
 model. A length cap buys little: Whisper is architecturally bounded at 448 decoder positions, so a
 runaway is already finite. Letting it run means a blown transcript surfaces as a WER above 1.0 —
-which the scoring spec (#132) must never clamp, precisely so the failure is visible rather than
-tidied away. Runaway decoding on quiet or atypical audio is this corpus's likeliest failure mode;
+which ADR-0015 already forbids clamping and the Scoring spec (#132) must not either, precisely so
+the failure stays visible rather than tidied away. Runaway decoding on quiet or atypical audio is this corpus's likeliest failure mode;
 hiding it would be the wrong kindness.
 
 ### Language — from the manifest, defaulting to `"en"`, with its source recorded
@@ -146,7 +146,7 @@ both the effective value and whether it was `declared` or `defaulted`.
 **Language detection is ruled out.** Its problem is not non-determinism — under greedy decoding with
 pinned weights, detection is an argmax over language tokens and answers the same way every time.
 The problem is that it makes the transcript depend on an input appearing nowhere in the provenance
-record, varying per-sample within one run. On quiet, atypical or near-silent audio — the population
+record, varying per-sample within one Run. On quiet, atypical or near-silent audio — the population
 this product exists for — mis-detection produces fluent garbage that lands in the report as
 *recognition error*, indistinguishable from it. That is the same silent inversion the map already
 rejected ASR-as-dataset-QA for.
@@ -181,9 +181,9 @@ and MPS, torch's own documentation says the difference may not mean what it appe
 
 The cost is wall clock — every clip is zero-padded to 30 s so the workload is encoder-bound, and
 turbo's speedup is decoder-only, leaving it at roughly `large-v3`'s encode cost. The architecture
-absorbs this: the hypothesis artifact means transcription runs **once**, while the iteration that
-actually happens in ASR evaluation — arguing about normalization — is re-scoring, which needs no
-model at all.
+absorbs this: the Hypothesis Record means Transcription runs **once**, while the iteration that
+actually happens in ASR evaluation — arguing about Text Normalization — is re-Scoring, which needs
+no model at all.
 
 **CPU thread count is recorded, not pinned.** This is a deliberate inconsistency with the paragraph
 above and is named rather than hidden. Floating-point reductions are order-dependent and thread
@@ -204,7 +204,7 @@ ADR-0005's "if it does not decode, the build aborts" applied to a missing requir
 Cache location is **not** set by this tool: `HF_HOME` / `HF_HUB_CACHE` govern, per the ecosystem
 convention. Where that lands in packaging and `.gitignore` guidance belongs to #137.
 
-No CI job reaches this code — the scoring path is model-free and torch-free by construction — so
+No CI job reaches this code — the Scoring path is model-free and torch-free by construction — so
 allowing downloads costs CI nothing.
 
 ### Over-length samples — checked and disclosed, never rejected
@@ -215,8 +215,8 @@ Whisper's short-form path is selected by `total_input_frames <= 3000` (30 s at 1
 included and flagged, and a dataset built with `duration_max_s = 45` produces 30–45 s clips
 routinely.
 
-The evaluator computes, per Sample, whether the frame count exceeds 480 000; records it on the
-hypothesis row; and warns at run level with the count. It does **not** abort.
+The evaluator computes, per Sample, whether the frame count exceeds 480 000; records it on that
+Sample's Hypothesis Record line; and warns at Run level with the count. It does **not** abort.
 
 The sharpest version of the risk is already defused by the decode constants, which apply in **both**
 regimes: `temperature=None` and `condition_on_prev_tokens=False` mean a long-form sample decodes
@@ -270,7 +270,7 @@ Apple Silicon (Accelerate + Ruy, no bundled BLAS), and `revision=` / `download_r
 `local_files_only=` as first-class constructor arguments. Rejected on provenance — third-party CT2
 conversions of unverified fidelity — with the unresolved PyAV/FFmpeg GPL question and the v0.3
 second-backend problem reinforcing it. Its dependency-weight advantage was real but bought less than
-claimed, since the torch-free scoring path comes from the import boundary, not the runtime.
+claimed, since the torch-free Scoring path comes from the import boundary, not the runtime.
 
 **`faster-whisper` with local `ct2-transformers-converter`** — recovers first-party provenance while
 keeping the light runtime. Rejected because it trades an unattested third-party artifact for a
@@ -310,8 +310,8 @@ find out. `-v2` additionally ships only a `.nemo` file, so the `transformers` ro
 **`facebook/wav2vec2-base-960h` and `facebook/mms-1b-all`** — rejected on their vocabularies, not
 their accuracy. wav2vec2's `vocab.json` is 32 tokens: uppercase letters, apostrophe and a word
 delimiter, with no lowercase, no punctuation and no digits; MMS's `eng` vocab is lowercase-only.
-Both force a normalization scheme onto the scoring stage *before a number exists at all*, which is
-exactly what the map keeps downstream of the hypothesis artifact. MMS is also CC-BY-NC-4.0.
+Both force a Text Normalization scheme onto Scoring *before a number exists at all*, which is
+exactly what the map keeps downstream of the Hypothesis Record. MMS is also CC-BY-NC-4.0.
 
 **Making the backend pluggable now** — a backend abstraction with one implementation is speculative
 generality, and #131 asks the question honestly because v0.3's fine-tuned comparison is by
@@ -326,11 +326,11 @@ the manifest's own `lang` field, and forecloses any non-English dataset without 
 Reading `lang` adds no knob; it consumes one v0.1 already has.
 
 **MPS, opportunistic or mandatory** — several times faster on this encoder-bound workload, which
-would matter if transcription were iterated. It is not: the hypothesis artifact makes it a
+would matter if transcription were iterated. It is not: the Hypothesis Record makes it a
 run-once stage. Rejected for the documentation gap above.
 
-**Richer hypothesis telemetry** — per-segment timestamps, token logprobs and confidence scores were
+**Richer Hypothesis Record telemetry** — per-segment timestamps, token logprobs and confidence scores were
 open on the map pending what the backend exposes. `transformers` exposes all three cheaply
 (`return_timestamps`, `output_scores`). Rejected for v0.2 anyway, in favour of the minimal constant
-set: none of them feeds WER, CER or the report's breakdowns, and each would need its own place in
-the hypothesis schema and its own determinism story.
+set: none of them feeds WER, CER or the Evaluation Report's Breakdowns, and each would need its own place in
+the Hypothesis Record schema (#133) and its own determinism story.
