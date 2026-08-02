@@ -240,6 +240,9 @@ one Normalizer and one set of decode parameters. Shortened to **Run**. Explicitl
 a Dataset Version is content-derived, reproducible, and recomputable from output alone, and a Run is
 none of those.
 _Avoid_: Version, snapshot, release, experiment.
+_Note_: "one Normalizer" is superseded by **ADR-0018**, which computes every Metric under **two**
+always-on Normalizers, `sdw-tier-a/1` and `whisper-english/b80bcf6`. Both are required inputs to a
+Run's identity; what a Run still holds one of is the *set* of Normalizers, fixed and not selectable.
 
 **Evaluation Report**:
 The emitted record of a Run: its Metrics, its Breakdowns, and the provenance attributing them. An

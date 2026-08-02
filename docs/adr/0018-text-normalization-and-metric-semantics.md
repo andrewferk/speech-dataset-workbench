@@ -13,8 +13,11 @@ It builds on ADR-0015 (evaluation vocabulary: Normalizer, Metric, Pooled, Macro-
 rates never clamped), ADR-0016 (the model, and WER > 1.0 as the surfacing mechanism for a blown
 transcript), ADR-0017 (Pooled headline over the Scope actually scored, per-Split Breakdown, failed
 Samples excluded and disclosed N-of-M), ADR-0007 (`RATIO_DP = 4`) and ADR-0008 (exact goldens with
-no tolerance). It consumes research #128. It **amends ADR-0017 in one place**: the predicted
-`[scoring]` config section is withdrawn.
+no tolerance). It consumes research #128. It **amends ADR-0017 in three places**, each annotated
+against the text it corrects: the `score` synopsis loses its `[--config <path>]`, the predicted
+`[scoring]` config section is withdrawn, and the Normalizer's identity is bound into a Run's identity
+rather than left to #134. It also annotates two `CONTEXT.md` glossary entries — **Macro-average**,
+whose unit this ADR names, and **Evaluation Run**, which said "one Normalizer".
 
 The Reference is the Prompt — v0.1's Intended text, filling ADR-0015's Reference *role*. This is the
 map's named ceiling: every Metric below measures **recognition error plus speaker deviation**, not
@@ -25,7 +28,7 @@ and two decisions here exist specifically because of it.
 
 ### Two Normalizers, both always computed, neither configurable
 
-Every Scoring run produces every Metric under **two** Normalizers:
+Scoring produces every Metric under **two** Normalizers:
 
 - **Tier A** (`sdw-tier-a/1`) — minimal: case and punctuation, nothing else. **The headline.**
 - **Tier B** (`whisper-english/b80bcf6`) — OpenAI's `EnglishTextNormalizer`, vendored verbatim.
@@ -316,6 +319,7 @@ insertions to the numerator and zero to the denominator. No division by zero eve
 | Reference `""`, Hypothesis `""` | **`null`** | 0 / 0; **SER: correct** |
 | Reference *N* tokens, Hypothesis `""` | `1.0` | *N* deletions / *N* |
 | WER > 1.0 | the real value | as computed |
+| **Failed Sample** (decode crashed; no Hypothesis exists) | **absent — no row** | **nothing; excluded, and disclosed N-of-M** |
 | Scope with zero total Reference tokens | — | **error; refuse to emit** |
 
 - **`null`, explicitly, for undefined per-Sample rates** — not a sentinel number. `jiwer` returning a
@@ -333,9 +337,19 @@ insertions to the numerator and zero to the denominator. No division by zero eve
   that changes what the Report says for no change in substance — the trap ADR-0004 and ADR-0011 both
   named. The per-Sample Metrics make a runaway locatable without one.
 
-This sits alongside ADR-0017's already-settled failure rule, which is unchanged: a **crashed** decode
-is excluded from Scoring and disclosed N-of-M, and is recorded distinctly from an empty Hypothesis —
-an empty string is the model's output; a crash is not.
+**The failed Sample's value is "absent", and that is a defined value rather than a gap in the
+table.** It is the one row above whose answer is *not* a number, so it is worth stating why rather
+than leaving it to a cross-reference. Scoring is a function of the Hypothesis Record, and a crashed
+decode wrote **no Hypothesis** into it — so there is no Reference/Hypothesis pair to align, and any
+value Scoring invented for it would be a claim about text the model never produced. Treating the
+crash as an empty Hypothesis is the specific error this forbids: an empty string is the model's
+output and is scored as *N* deletions, while a crash is the absence of output and is scored not at
+all. Both would otherwise land on the same number and become indistinguishable in the Report.
+
+This ratifies ADR-0017's already-settled failure rule, which is unchanged and which supplies the
+honesty condition that makes exclusion safe: the excluded Samples are **counted and disclosed
+N-of-M**, so a Scope that dropped Samples can never be read as a Scope that scored all of them. The
+distinction is recorded in the Hypothesis Record itself, per #133.
 
 ### Aggregation and precision
 
