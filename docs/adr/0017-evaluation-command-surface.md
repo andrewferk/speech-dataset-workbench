@@ -98,6 +98,12 @@ sdw transcribe --dataset <built-dataset-dir> --eval-out <dir>
 sdw score      --run <run-dir> [--config <path>]
 ```
 
+> **Amended by ADR-0018 (#132): the `[--config <path>]` above is withdrawn — `sdw score` takes no
+> `--config` flag.** The synopsis is left as written because ADR-0017's reasoning for it is still
+> worth reading; the current surface is `sdw score --run <run-dir>` and nothing else. See the
+> amendment below the `[scoring]` paragraph for why every knob predicted for that section came back
+> a constant.
+
 **`--dataset`, not `--data-in` and not `--data-out`.** The built Dataset Version is evaluation's
 input, but `--data-in` means *the operator's source recordings* throughout ADR-0002 and
 `CONTEXT.md`, and reusing it would imply the evaluator can reach source audio — it cannot; it reads
