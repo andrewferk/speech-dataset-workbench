@@ -320,8 +320,11 @@ insertions to the numerator and zero to the denominator. No division by zero eve
 
 - **`null`, explicitly, for undefined per-Sample rates** — not a sentinel number. `jiwer` returning a
   raw insertion count from a function documented to return a rate is precisely what #128 warns
-  "silently poisons a mean", and these values feed Macro-averages and Breakdowns. A `null` propagates
-  as an absence; a `0.0` or an `inf` propagates as a lie.
+  "silently poisons a mean". A `null` propagates as an absence; a `0.0` or an `inf` propagates as a
+  lie. Note that a per-Sample `null` does **not** feed a Macro-average: Aggregation below establishes
+  that Macro averages *group Pooled rates*, and Pooling absorbs an empty Reference before any mean is
+  taken. The `null` is emitted for the Sample's own row, and its protection is against a consumer —
+  ours or a later one — that means to average Samples directly.
 - **A Scope with zero total Reference tokens is an error, not a number.** `0.0` claims perfection and
   `inf` claims catastrophe; neither is a measurement.
 - **WER > 1.0 is never clamped** — ratifying ADR-0015. #128 cites a real published **287.4%**, and
@@ -350,19 +353,36 @@ compute.*
 
 **What Macro averages over is the group's Pooled rate — not the per-Sample rates inside it.** A
 Breakdown group is Pooled first, and Macro is the unweighted mean of those group rates; so the
-`null` that can reach a Macro-average is a **group** whose rate is undefined, which happens exactly
-when the group's total Reference length is zero. That is a *narrower* condition than the per-Sample
-`null` of the edge-case table above: a group containing an empty-Reference Sample alongside any
-non-empty one has a perfectly well-defined Pooled rate, and its per-Sample `null` never surfaces
-here. The rule, stated over the right objects:
+`null` that can reach a Macro-average is a **group** whose rate is undefined — which is a *narrower*
+condition than the per-Sample `null` of the edge-case table above. A group containing an
+empty-Reference Sample alongside any non-empty one has a perfectly well-defined Pooled rate, and its
+per-Sample `null` never surfaces here.
 
-- **Macro, SD and median exclude groups whose Pooled rate is undefined, and state how many they
-  excluded.** With every group excluded, the Macro is `null` — not `0.0`.
+**Undefined-ness is per Metric, because the three denominators differ.** A group's Pooled rate is
+undefined exactly when that Metric's own denominator is zero:
+
+| Metric | denominator | group rate undefined when |
+| --- | --- | --- |
+| WER | Reference **tokens** in the group | every Reference in the group normalizes empty |
+| CER | Reference **characters** in the group | every Reference in the group normalizes empty |
+| SER | **pairs** in the group | the group holds no Samples at all |
+
+So a group whose every Reference is empty still has a well-defined Pooled **SER** — consistent with
+the edge-case table above, which makes empty-vs-empty a *correct* Sample. Such a group reports a
+`null` WER and CER and a real SER, and is excluded from the WER and CER Macros while counting in the
+SER Macro. A group that is genuinely empty of Samples is not emitted at all.
+
+The rule, stated over the right objects:
+
+- **Macro, SD and median exclude groups whose Pooled rate is undefined *for that Metric*, and state
+  how many they excluded.** The exclusion is therefore per Metric — the same group can be absent from
+  the WER Macro and present in the SER Macro. With every group excluded, the Macro is `null` — not
+  `0.0`.
 - **A zero-Reference-length *group* is not the error condition** that the edge-case table gives a
   zero-Reference-length Scope. Refusing to emit is right for the headline, where the alternative is a
   Report whose single number is a fiction; inside a Breakdown it would let one degenerate group
-  suppress an otherwise valid Report. The group is emitted with its integer counts, a `null` rate,
-  and its exclusion from the Macro disclosed.
+  suppress an otherwise valid Report. The group is emitted with its integer counts, `null` for WER
+  and CER, its real SER, and its exclusions from the Macros disclosed.
 - Per-Sample `null` rates are still emitted per Sample, and are still excluded — with a count —
   from any statistic computed *across Samples* rather than across groups.
 
