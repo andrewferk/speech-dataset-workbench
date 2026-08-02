@@ -234,6 +234,29 @@ total error counts usually agree either way, and the weights change only the tie
 substitution and an insertion+deletion pair. Since the S/D/I split is reported, that tie-break is
 visible, and matching modern convention beats matching a toolkit we use only as a one-time oracle.
 
+**The backtrace tie-break is fixed here, because equal costs make the S/D/I split ambiguous.** The
+total — and therefore WER, CER and SER — is unaffected by which minimal path is walked, but the
+*split* is not, and this ADR emits S, D and I as the source of truth. With `ref = "a b"` and
+`hyp = "b a"`, two substitutions and one deletion plus one insertion both cost 2; without a stated
+rule, two conforming implementations report different S/D/I for the same inputs and the golden test
+pins an accident.
+
+The matrix is indexed **Reference along `i`, Hypothesis along `j`**, so a diagonal step is a match or
+substitution, a step in `i` alone is a **deletion**, and a step in `j` alone is an **insertion**.
+Backtrace starts at `(len(ref), len(hyp))` and, among steps achieving the cell's minimum cost, takes
+the **first** of:
+
+1. **diagonal** — match or substitution
+2. **deletion**
+3. **insertion**
+
+Diagonal first keeps one substitution in preference to an insertion+deletion pair wherever both are
+minimal, which is the reading of an aligned pair a human expects. Deletion before insertion is
+arbitrary in isolation, but it must be *written down* to be reproducible, and this ordering matches
+the conventional `sclite` presentation of the pair. The rule is a **contract obligation**, not an
+implementation note: it is what makes ADR-0008's no-tolerance goldens well-defined over the emitted
+counts.
+
 **`merge_compounds` is off and not implemented.** It exists as an option only under `kaldialign`. It
 would be off regardless: it lowers WER and, per #128, "breaks comparability with every historical
 published WER"; Tier A already spaces hyphens, so `well-known` ≡ `well known` is handled
@@ -323,17 +346,42 @@ is NIST's `Sum/Avg` / `Mean` / `S.D.` / `Median` shape, which `sclite` has print
 and which #128 measured **6.2 points apart** on four speakers in NIST's own shipped example. All are
 free from counts already held, and the map's charting note applies: *whichever loses should still be
 reported if it is cheap, because the two diverge and a reader will assume the one you did not
-compute.* Macro-averages **exclude `null` per-Sample rates and state how many they excluded.**
+compute.*
+
+**What Macro averages over is the group's Pooled rate — not the per-Sample rates inside it.** A
+Breakdown group is Pooled first, and Macro is the unweighted mean of those group rates; so the
+`null` that can reach a Macro-average is a **group** whose rate is undefined, which happens exactly
+when the group's total Reference length is zero. That is a *narrower* condition than the per-Sample
+`null` of the edge-case table above: a group containing an empty-Reference Sample alongside any
+non-empty one has a perfectly well-defined Pooled rate, and its per-Sample `null` never surfaces
+here. The rule, stated over the right objects:
+
+- **Macro, SD and median exclude groups whose Pooled rate is undefined, and state how many they
+  excluded.** With every group excluded, the Macro is `null` — not `0.0`.
+- **A zero-Reference-length *group* is not the error condition** that the edge-case table gives a
+  zero-Reference-length Scope. Refusing to emit is right for the headline, where the alternative is a
+  Report whose single number is a fiction; inside a Breakdown it would let one degenerate group
+  suppress an otherwise valid Report. The group is emitted with its integer counts, a `null` rate,
+  and its exclusion from the Macro disclosed.
+- Per-Sample `null` rates are still emitted per Sample, and are still excluded — with a count —
+  from any statistic computed *across Samples* rather than across groups.
 
 **The Tier B − Tier A delta is emitted as a first-class number**, plainly named as a delta.
 
 **Precision inherits v0.1 rather than inventing.** WER, CER and SER are ratios, and ADR-0007 already
 fixed that ratios take `RATIO_DP = 4`. No new constant.
 
-- **Integer counts are the source of truth and are emitted exactly** — S, D, I, Reference tokens,
-  Reference characters, sentence-error count, Sample counts. Rates are *derived*. This is what lets
-  any later analysis — a confidence interval, a re-aggregation, a Breakdown nobody has asked for yet
-  — be computed without re-scoring.
+- **Integer counts are the source of truth and are emitted exactly.** Every rate this ADR defines is
+  recomputable from integers alone, which means **word-level and character-level counts are emitted
+  separately** — CER is its own alignment (per Sample, never concatenated), so it has its own error
+  counts and they are not derivable from the word-level ones:
+  - **word-level** — S, D, I and Reference token count
+  - **character-level** — S, D, I and Reference character count
+  - **sentence-level** — sentence-error count and Sample count
+
+  Rates are *derived*. This is what lets any later analysis — a confidence interval, a
+  re-aggregation, a Breakdown nobody has asked for yet — be computed without re-scoring. Each set is
+  emitted under **both** Normalizer tiers, since each tier aligns its own text.
 - **Round at serialization, never at measurement**, quoting v0.1's own rule, which exists so "two
   runs within a ULP serialize identically" and ADR-0008's comparison "needs no tolerance."
 - **The canonical form is a dimensionless rate**, `0.0833`, not `8.33%`. Percentage rendering is the
@@ -385,6 +433,7 @@ Report.
   executable demonstration of the boundary.
 - The golden fixture must cover, at minimum: tab / newline / NBSP inputs (the 200% trap), an empty
   normalized Reference under Tier B, an empty Hypothesis, a WER > 1.0 case, a Scope of one Sample,
+  a case with two equal-cost alignments so the backtrace tie-break is pinned rather than assumed,
   and both tiers over the same fixture so the delta is pinned too.
 - Six numbers exist per Scope (three Metrics × two tiers), before Breakdowns. Exactly one is the
   headline; everything else is explicitly subordinate. Presenting that legibly is #136's problem, and
