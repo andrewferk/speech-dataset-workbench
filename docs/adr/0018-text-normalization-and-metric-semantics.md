@@ -447,8 +447,7 @@ ADR-0010's existing separator convention:
   comparable with old ones.
 - **`whisper-english/b80bcf6`** — the vendored commit.
 
-**Both strings are required inputs to the identity of a Scoring Run, not merely to its provenance
-display.** #132 states the reason and this ADR adopts it unchanged: the rules are *part of the
+**Both strings are required inputs to a Run's identity, not merely to its provenance display.** #132 states the reason and this ADR adopts it unchanged: the rules are *part of the
 Metric's definition*, so *"the same hypotheses scored under different rules are different numbers and
 must not be silently comparable."* Everything above makes that concrete — Tier A and Tier B produce
 six different numbers from one Hypothesis Record, and the whole point of the split contract is that
