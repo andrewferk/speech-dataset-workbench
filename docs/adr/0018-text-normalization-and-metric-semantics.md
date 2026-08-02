@@ -351,7 +351,12 @@ free from counts already held, and the map's charting note applies: *whichever l
 reported if it is cheap, because the two diverge and a reader will assume the one you did not
 compute.*
 
-**What Macro averages over is the group's Pooled rate — not the per-Sample rates inside it.** A
+**What Macro averages over is the group's Pooled rate — not the per-Sample rates inside it.** This
+**names a unit ADR-0015 deliberately left generic**: that ADR defines Macro-average as averaging
+*"per-unit rates"* and says in the same breath that the headline choice *"is a scoring-spec
+decision"* — this is that spec, so fixing the unit is its job rather than a departure. `CONTEXT.md`'s
+glossary entry had compressed "per-unit" to "per-Sample", which is narrower than ADR-0015 and wrong
+once the unit is named; it is annotated in place rather than silently left to disagree. A
 Breakdown group is Pooled first, and Macro is the unweighted mean of those group rates; so the
 `null` that can reach a Macro-average is a **group** whose rate is undefined — which is a *narrower*
 condition than the per-Sample `null` of the edge-case table above. A group containing an
@@ -432,7 +437,7 @@ this repo owns or a field of the dataset it read.*
 configuration, `score` grows a `--config` back carrying a *different* section; `[scoring]` simply
 stays absent. #135 therefore inherits the question of whether `score` has a config file at all.
 
-### Normalizer identity reaches the Report
+### Normalizer identity reaches the Report — and is a required input to Run identity
 
 ADR-0015 defines a Normalizer as *"a named, versioned rule-set"*, named *"because there is no single
 canonical one… so an Evaluation Report must state which one it used"*. Both are named using
@@ -442,9 +447,26 @@ ADR-0010's existing separator convention:
   comparable with old ones.
 - **`whisper-english/b80bcf6`** — the vendored commit.
 
-#134 inherits a **constraint rather than a question**: the scoring configuration contributes nothing
-to Run identity, because there is no scoring configuration. Only these two strings need to reach the
-Report.
+**Both strings are required inputs to the identity of a Scoring Run, not merely to its provenance
+display.** #132 states the reason and this ADR adopts it unchanged: the rules are *part of the
+Metric's definition*, so *"the same hypotheses scored under different rules are different numbers and
+must not be silently comparable."* Everything above makes that concrete — Tier A and Tier B produce
+six different numbers from one Hypothesis Record, and the whole point of the split contract is that
+re-scoring is cheap and therefore frequent. An identity that omitted the Normalizer would let two
+Runs over the same Hypotheses collide while disagreeing about every Metric, which is precisely the
+silent comparability the ticket forbids.
+
+So #134 inherits a **constraint rather than a question**, in both directions:
+
+- **The scoring configuration contributes nothing** to Run identity, because there is no scoring
+  configuration.
+- **`sdw-tier-a/1` and `whisper-english/b80bcf6` must contribute**, and bumping either must change
+  the Run's identity. What #134 still owns is the *form* — whether identity is a hash over a
+  canonical preimage in ADR-0010's style, what else joins them in it, and how it is rendered — not
+  *whether* these two strings are in it.
+
+These are the only two strings this ADR sends; a Normalizer's rules are otherwise fixed here as
+constants, so the version tag is the whole of its identity.
 
 ## Consequences
 

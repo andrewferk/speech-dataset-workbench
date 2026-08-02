@@ -176,10 +176,13 @@ is *designed* to be scored many ways. The Record's provenance attributes the **T
 Report separately records the effective scoring config and the Normalizer's identity as attribution.
 Whether either is an *id* remains #134's.
 
-> **Amended by ADR-0018:** the constraint tightens into an answer for half of this. There *is* no
-> effective scoring config, so nothing of the kind reaches the Run's identity; what the Report
-> records is the two Normalizer identity strings, `sdw-tier-a/1` and `whisper-english/b80bcf6`.
-> Whether those constitute an *id* remains #134's.
+> **Amended by ADR-0018:** the constraint tightens into an answer on both halves. There *is* no
+> effective scoring config, so nothing of the kind reaches the Run's identity. The two Normalizer
+> identity strings, `sdw-tier-a/1` and `whisper-english/b80bcf6`, go further than attribution:
+> ADR-0018 makes them **required inputs to Run identity**, because the same Hypotheses scored under
+> different rules are different numbers and must not be silently comparable. What remains #134's is
+> the *form* that identity takes — hash, preimage, rendering — not whether these two strings are in
+> it.
 
 ### Failure policy — preflight before the model loads
 
