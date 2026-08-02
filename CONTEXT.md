@@ -220,10 +220,13 @@ The aggregation that sums errors and Reference lengths across a group and divide
 _Avoid_: Total, overall, corpus average.
 
 **Macro-average**:
-The aggregation that averages per-Sample Metrics, weighting every unit equally. Legitimate for a
+The aggregation that averages per-unit rates, weighting every unit equally. Legitimate for a
 Breakdown, where groups differ in size on purpose; never presented unlabelled as "the WER", because
 it and Pooled can differ by several points on the same data.
 _Avoid_: Average, mean (unqualified).
+_Note_: This entry said "per-Sample Metrics"; ADR-0015 defines it as "per-unit rates" and leaves the
+unit to the scoring spec. **ADR-0018 fixes the unit as the Breakdown group**, each of which is Pooled
+first — so a per-Sample `null` inside a mixed group never reaches a Macro-average.
 
 **Evaluation Scope**:
 The set of Samples one Run covers, fixed by a Split selection. The unit inside a Scope is a
@@ -237,6 +240,9 @@ one Normalizer and one set of decode parameters. Shortened to **Run**. Explicitl
 a Dataset Version is content-derived, reproducible, and recomputable from output alone, and a Run is
 none of those.
 _Avoid_: Version, snapshot, release, experiment.
+_Note_: "one Normalizer" is superseded by **ADR-0018**, which computes every Metric under **two**
+always-on Normalizers, `sdw-tier-a/1` and `whisper-english/b80bcf6`. Both are required inputs to a
+Run's identity; what a Run still holds one of is the *set* of Normalizers, fixed and not selectable.
 
 **Evaluation Report**:
 The emitted record of a Run: its Metrics, its Breakdowns, and the provenance attributing them. An

@@ -98,6 +98,12 @@ sdw transcribe --dataset <built-dataset-dir> --eval-out <dir>
 sdw score      --run <run-dir> [--config <path>]
 ```
 
+> **Amended by ADR-0018 (#132): the `[--config <path>]` above is withdrawn — `sdw score` takes no
+> `--config` flag.** The synopsis is left as written because ADR-0017's reasoning for it is still
+> worth reading; the current surface is `sdw score --run <run-dir>` and nothing else. See the
+> amendment below the `[scoring]` paragraph for why every knob predicted for that section came back
+> a constant.
+
 **`--dataset`, not `--data-in` and not `--data-out`.** The built Dataset Version is evaluation's
 input, but `--data-in` means *the operator's source recordings* throughout ADR-0002 and
 `CONTEXT.md`, and reusing it would imply the evaluator can reach source audio — it cannot; it reads
@@ -153,11 +159,30 @@ Scoring is where the knobs live, so `score` inherits #8's pattern unchanged — 
 optional `--config` TOML — with one new section, **`[scoring]`**, owned by #132 (Normalizer tier,
 `merge_compounds`, which Metrics, CER whitespace semantics, SER, whether a CI is reported).
 
+> **Amended by ADR-0018 (#132): `[scoring]` does not exist, and `score` has no `--config` flag.**
+> Every knob predicted in the paragraph above came back a constant — both Normalizer tiers always
+> run, `merge_compounds` is off and unimplemented, all three Metrics are always computed, CER's
+> whitespace semantics are fixed, SER is always emitted, and the confidence-interval question went to
+> #136 as report content rather than configuration. That leaves an empty section, and *an empty
+> config section invites a knob* — this ADR's own reason for refusing `transcribe` a `--config`. The
+> property is therefore symmetric, not split: **neither evaluation command has any configuration.**
+> Read the paragraph above as the prediction it was; ADR-0018 is the decision. If #135 finds that
+> output layout or Run retention needs configuration, `score` grows `--config` back carrying a
+> *different* section — `[scoring]` stays absent either way.
+
 On whether the effective config feeds the Run's identity, this ADR hands #134 a **constraint, not an
 answer**: the scoring config cannot work the way v0.1's config does, because one Hypothesis Record
 is *designed* to be scored many ways. The Record's provenance attributes the **Transcription**; the
 Report separately records the effective scoring config and the Normalizer's identity as attribution.
 Whether either is an *id* remains #134's.
+
+> **Amended by ADR-0018:** the constraint tightens into an answer on both halves. There *is* no
+> effective scoring config, so nothing of the kind reaches the Run's identity. The two Normalizer
+> identity strings, `sdw-tier-a/1` and `whisper-english/b80bcf6`, go further than attribution:
+> ADR-0018 makes them **required inputs to Run identity**, because the same Hypotheses scored under
+> different rules are different numbers and must not be silently comparable. What remains #134's is
+> the *form* that identity takes — hash, preimage, rendering — not whether these two strings are in
+> it.
 
 ### Failure policy — preflight before the model loads
 
