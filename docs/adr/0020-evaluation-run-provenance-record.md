@@ -16,7 +16,8 @@ finding a substitute for it.
 
 It builds on ADR-0006 (no wall-clock, host or path-outside-the-tree facts in durable output),
 ADR-0010 (`dataset_version`'s promises and `dataset.json`'s shape), ADR-0015 (a Run is not a
-Version; the reserved `<Thing> Record` pattern), ADR-0016 (the mandated model-identity field set),
+Version; **Hypothesis Record** and **Evaluation Scope**), ADR-0016 (the mandated model-identity
+field set),
 ADR-0017 (two commands, provenance-last as the sentinel, N-of-M disclosure), ADR-0018 (no scoring
 configuration exists) and ADR-0019 (`run.json` itself). It consumes #129's rule that both
 `tool_version` strings are recorded and neither assumed equal to the other, and its finding that
@@ -233,14 +234,13 @@ sufficient is the likely error:
 - **the Report (#136)** — the same Normalizer identity. Metrics under ADR-0018's Tier A and Tier B
   are not comparable to each other, and that string is Report-side per the decision above.
 
-### No `CONTEXT.md` change, and the reserved name goes unclaimed
+### No `CONTEXT.md` change, and `run.json` gets no name of its own
 
-No new domain terms. In particular, **ADR-0015's reserved `<Thing> Record` pattern is deliberately
-not taken up as "Run Record".** Naming `run.json`'s contents would assert a second artifact at the
-exact point ADR-0016 (*"not a second artifact"*) and ADR-0019 (*"neither is readable as a Run without
-the other"*) spent effort denying one. The **Hypothesis Record** is the artifact; `run.json` is its
-provenance file and its completeness sentinel. ADR-0015 left the slot open for this ADR to fill or
-dissolve, and it dissolves.
+No new domain terms. In particular, **`run.json`'s contents are deliberately not named "Run
+Record"**, on the symmetry with **Hypothesis Record** that ADR-0015 established. Naming them would
+assert a second artifact at the exact point ADR-0016 (*"not a second artifact"*) and ADR-0019
+(*"neither is readable as a Run without the other"*) spent effort denying one. The **Hypothesis
+Record** is the artifact; `run.json` is its provenance file and its completeness sentinel.
 
 That no vocabulary is needed is the same retrospective signal ADR-0018 recorded: the terms #126
 settled were the right ones.
@@ -318,9 +318,9 @@ happens in `score`: the field would describe an event that had not occurred, and
 first time one Record was scored under a later tool version — which ADR-0018's design makes the
 expected case, not an edge one.
 
-**Taking up ADR-0015's reserved name as "Run Record"** — the slot was left open for exactly this
-ticket, and the symmetry with **Hypothesis Record** is attractive. Rejected because naming it asserts
-the second artifact ADR-0016 and ADR-0019 both went out of their way to deny.
+**Naming `run.json`'s contents "Run Record"** — the symmetry with **Hypothesis Record** is
+attractive. Rejected because naming it asserts the second artifact ADR-0016 and ADR-0019 both went
+out of their way to deny.
 
 **A comparability rule stated over `dataset_version` alone** — one field, one comparison, and what
 the ticket's framing invites. Rejected because #129 made the id one-directional, so the rule would be
