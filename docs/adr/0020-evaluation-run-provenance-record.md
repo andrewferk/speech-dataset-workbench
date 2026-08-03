@@ -202,7 +202,8 @@ this rule cannot, and does not.
 
 | Tier | Blocks | Meaning |
 | --- | --- | --- |
-| **Must match** | `dataset.dataset_version`, `model`, `decode`, `language.value` | Otherwise the two numbers answer **different questions**, and no comparison is legitimate |
+| **Must match** | `model`, `decode`, `language.value` | Otherwise the two numbers answer **different questions**, and no comparison is legitimate |
+| **Must match *or* escalate** | `dataset.dataset_version` | Equal ⟹ the same data, settled. **Unequal ⟹ nothing** — do not conclude "not comparable"; apply the escalation below |
 | **May differ, must be disclosed** | `runtime`, `host`, `tool_version` | The same question under different arithmetic — floating-point reduction order. Comparable with a stated caveat |
 | **Never relevant** | `timing`, `record_version`, `record_line_count` | |
 
@@ -224,9 +225,11 @@ are long gone. This is a payoff of the Record being a superset, not a new mechan
 sufficient is the likely error:
 
 - **`run.json`** — the tiers above.
-- **the Hypothesis Record** — the same Sample set. Under ADR-0017's N-of-M policy, two Runs with
-  different failure counts Pool over different denominators; and a Run with failures is not an
-  unlabelled Baseline.
+- **the Hypothesis Record** — the same **Evaluation Scope**, which is the term ADR-0015 minted for
+  exactly this clause (*"without it the comparability rule between two Runs is unstatable — two Runs
+  over the same Dataset Version are not comparable if one covered `test` and the other covered
+  everything"*). Under ADR-0017's N-of-M policy, two Runs with different failure counts also Pool
+  over different denominators; and a Run with failures is not an unlabelled Baseline.
 - **the Report (#136)** — the same Normalizer identity. Metrics under ADR-0018's Tier A and Tier B
   are not comparable to each other, and that string is Report-side per the decision above.
 
