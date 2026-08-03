@@ -121,6 +121,13 @@ naming and retention entirely to #135 without a later CLI change.
 the directory is self-contained — Record, provenance, Report; re-scoring is the shortest possible
 invocation; and pointing at a directory again leaves the layout inside it to #135.
 
+> **Amended by ADR-0019 (#133): "the layout inside it" is narrowed to the Run *directory*.** #135
+> still owns the Run directory's name, its position under `--eval-out`, retention across Runs, and
+> where #136's Report lands. The two files a Run holds are named by ADR-0019 — `hypotheses.jsonl` and
+> `run.json` — because the crash-safety decision below couples their existence, write-order and
+> semantics, so leaving their names to a later ADR would hand #135 a decision it could only
+> rubber-stamp. The same applies to the "root that holds Runs" sentence above.
+
 ### The Hypothesis Record is Scoring's only input
 
 **`score` never opens the dataset.** It reads one Run directory and nothing else.
