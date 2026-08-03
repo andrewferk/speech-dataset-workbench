@@ -257,6 +257,13 @@ alongside each Hypothesis; "provenance record" is #134's working name for that f
 second artifact. #134 owns its shape and where it sits. This ADR mandates only the
 model-identifying fields within it:
 
+> **Amended by ADR-0019 (#133): "where it sits" is decided, and #134 keeps only the content.**
+> The provenance lives in `run.json`, a sibling of `hypotheses.jsonl` inside the Run directory — not
+> per-line and not on a header line, because ADR-0017 made provenance the completeness sentinel and a
+> header cannot be written last. "Not a second artifact" survives: the two files are one Run
+> directory, and neither is readable as a Run without the other. #134 still owns the field set,
+> including the table below.
+
 | Field | Value |
 | --- | --- |
 | `model_repo_id` | `openai/whisper-large-v3-turbo` |
