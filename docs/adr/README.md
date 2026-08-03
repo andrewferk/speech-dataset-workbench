@@ -1,6 +1,6 @@
 # Decision records
 
-Twenty architecture decision records — 0001–0014 shaped v0.1, and 0015 onward is v0.2. Each states
+Twenty-one architecture decision records — 0001–0014 shaped v0.1, and 0015 onward is v0.2. Each states
 what was decided and why, and — usually at greater length — what was considered and rejected, so a
 reader who disagrees can find out whether their objection was already answered.
 
@@ -49,3 +49,4 @@ is the one place where reading the ADR alone leaves you with a rule the repo no 
 | [0018](0018-text-normalization-and-metric-semantics.md) | Two Normalizers always run and neither is configurable — a minimal Tier A as the headline, OpenAI's vendored normalizer as the labelled second pass — scored by our own Levenshtein into WER/CER/SER, Pooled everywhere, with empty References retained and undefined per-Sample rates emitted as `null`. | |
 | [0019](0019-hypothesis-record-format.md) | A Run holds `hypotheses.jsonl` and `run.json`; one Record file covers every Split, denormalizing the Reference and every Breakdown attribute onto lines ordered by content-derived `id` — with `hypothesis: null` the sole failure marker, and the sentinel carrying a line count `score` checks. | ADR-0020, in place |
 | [0020](0020-evaluation-run-provenance-record.md) | A Run has **no id** — its handle is its directory name — and `run.json` carries provenance instead, in nested blocks drawn so the comparability rule reads off them: wall-clock and host facts belong here because the v0.1 exclusion was scoped to files that must diff clean, and `tool_version` turns out to have three occurrences, not two. | |
+| [0021](0021-evaluation-output-layout-and-run-retention.md) | Runs accumulate under `--eval-out` and nothing prunes them, each in a `run-<UTC start>` directory that is a renameable handle rather than a record — while the Report is never written at all, making `score` read-only and a Run's bytes fixed at the end of Transcription. | |
