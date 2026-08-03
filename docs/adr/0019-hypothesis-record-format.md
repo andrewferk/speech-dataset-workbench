@@ -261,8 +261,11 @@ format** rather than of the Run's provenance:
   this be 0.2 now?") that gets asked repeatedly and answered wrong once. Declaring a version at all
   follows v0.1's own precedent, which put `manifest_version` beside `tool_version` in one file rather
   than making a reader map tool version to schema through a table that does not exist.
-- **The Record's expected line count** — and `score` **hard-errors when `hypotheses.jsonl` disagrees
-  with it**, naming the Record truncated.
+- **`record_line_count`: an integer** — the number of lines `hypotheses.jsonl` is expected to hold,
+  which is the number of Samples in the Dataset Version, failures included. `score` **hard-errors
+  when the file disagrees with it**, naming the Record truncated. The name says *lines of the
+  Record*, not *Samples transcribed*, because the two diverge the moment a resumption mechanism
+  exists and only the first is checkable without leaving the Run directory.
 
 That last one is the only integrity check available to a stage that may not reach outside its Run
 directory, and it upgrades the sentinel from *the writer reached the end* to *the file is complete
