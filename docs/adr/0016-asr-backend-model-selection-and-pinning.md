@@ -264,6 +264,17 @@ model-identifying fields within it:
 > directory, and neither is readable as a Run without the other. #134 still owns the field set,
 > including the table below.
 
+> **Amended by ADR-0020 (#134): the set is ratified; three keys are re-spelled.** `run.json` groups
+> its fields into nested blocks, so `model_repo_id`, `model_revision` and `model_license` are
+> `model.repo_id`, `model.revision` and `model.license`. This table mandated the model-identifying
+> *fields* — a set, not a spelling — and every one of them is present. Two placements also differ
+> from the reading this table invites: `language` sits in its own block beside `language_source`
+> rather than among `decode_params`, because a fact recorded twice can disagree with itself; and
+> `torch_num_threads` sits in `runtime` rather than among the decode parameters, because it is a
+> property of the execution environment, not of the search. It shares its reduction-order reason
+> with the host-architecture fields, but those sit in a separate `host` block — the reason spans the
+> two blocks; the fields are not adjacent.
+
 | Field | Value |
 | --- | --- |
 | `model_repo_id` | `openai/whisper-large-v3-turbo` |

@@ -249,7 +249,18 @@ ADR-0017's own crash-safety argument rather than on preference. `CONTEXT.md`'s *
 entry is annotated accordingly.
 
 **#134 owns its content** — the model-identity table ADR-0016 mandates, #129's version strings,
-ADR-0018's two Normalizer identity strings, and whether a Run has an *id* at all. This ADR fixes only
+ADR-0018's two Normalizer identity strings, and whether a Run has an *id* at all.
+
+> **Amended by ADR-0020 (#134): the Normalizer strings do not go here.** `run.json` is written by
+> `sdw transcribe`; Text Normalization happens later, in `sdw score`, possibly under a different
+> installed tool version — and ADR-0018's design is that one Record is scored repeatedly. A
+> Normalizer identity in `run.json` would describe an event that had not happened when the file was
+> written. `sdw-tier-a/1` and `whisper-english/b80bcf6`, and the *scoring* `tool_version` beside
+> them, are **Report-side provenance and belong to #136**. The same split makes #129's "two
+> occurrences" three: built, transcribed, scored. ADR-0020 also answers the last item — **a Run has
+> no id**; its handle is its directory name, which stays #135's.
+
+This ADR fixes only
 the file, its write-order, its byte format, and two fields that are properties of the **Record's
 format** rather than of the Run's provenance:
 

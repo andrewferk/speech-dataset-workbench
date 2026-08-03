@@ -154,6 +154,14 @@ cross-machine stable at all. The scheme and ADR-0005 agree.
 > that scored it**, separately. These will routinely disagree, and the disagreement is a fact to
 > record rather than reconcile — `tool_version` is not split, and no new version string is minted.
 >
+> > **Amended by ADR-0020 (#134): two occurrences is three.** ADR-0017 split the evaluation seam
+> > into `sdw transcribe` and `sdw score` *after* #129 resolved, and the second occurrence splits
+> > with it: `dataset.json` names the tool that **built**, `run.json` the tool that
+> > **transcribed**, and the Report the tool that **scored**. Every conclusion above survives —
+> > record each occurrence, assume no two match, split nothing, mint nothing — and the rule ADR-0020
+> > states from it is the one this file already follows: top-level `tool_version` names the tool
+> > that wrote *this* file.
+>
 > **Considered and rejected:**
 >
 > - **A separate build-path version, distinct from `tool_version`** — precise in principle; loses to
