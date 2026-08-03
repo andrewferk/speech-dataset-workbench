@@ -1,6 +1,6 @@
 # Decision records
 
-Eighteen architecture decision records — 0001–0014 shaped v0.1, and 0015 onward is v0.2. Each states
+Nineteen architecture decision records — 0001–0014 shaped v0.1, and 0015 onward is v0.2. Each states
 what was decided and why, and — usually at greater length — what was considered and rejected, so a
 reader who disagrees can find out whether their objection was already answered.
 
@@ -44,6 +44,7 @@ is the one place where reading the ADR alone leaves you with a rule the repo no 
 | [0013](0013-recordings-csv-ingest-and-duplicate-resolution.md) | A fixed six-column `recordings.csv` is the authority on what the Dataset contains; paths stay relative and inside `--data-in`, and byte-identical Originals collapse when their metadata agrees and abort when it conflicts. | |
 | [0014](0014-build-backend-and-installed-entry-point.md) | A `hatchling` build backend, so `uv sync` installs the package and the entry point is `sdw` — removing the four unchecked copies of `PYTHONPATH=src`. | |
 | [0015](0015-evaluation-vocabulary.md) | Evaluation's vocabulary: Transcription is attributed and emits a Hypothesis Record, Scoring is reproducible and derives Metrics; `Reference` narrows to a role, `Normalization` stays audio-only, and a Run is deliberately not a Version. | |
-| [0016](0016-asr-backend-model-selection-and-pinning.md) | `transformers` against `openai/whisper-large-v3-turbo` pinned by commit sha, hard-coded not configurable, called through the explicit processor so no path ever reaches FFmpeg — greedy with no guards, CPU-only, language from the manifest, and every condition recorded rather than assumed. | |
-| [0017](0017-evaluation-command-surface.md) | Two commands — `transcribe` covers the whole Dataset Version with no knobs, `score` picks the view from a self-contained Hypothesis Record — with structural checks preflighted before the model loads and the Run's provenance written last as the completeness sentinel. | ADR-0018, in place |
+| [0016](0016-asr-backend-model-selection-and-pinning.md) | `transformers` against `openai/whisper-large-v3-turbo` pinned by commit sha, hard-coded not configurable, called through the explicit processor so no path ever reaches FFmpeg — greedy with no guards, CPU-only, language from the manifest, and every condition recorded rather than assumed. | ADR-0019, in place |
+| [0017](0017-evaluation-command-surface.md) | Two commands — `transcribe` covers the whole Dataset Version with no knobs, `score` picks the view from a self-contained Hypothesis Record — with structural checks preflighted before the model loads and the Run's provenance written last as the completeness sentinel. | ADR-0018, ADR-0019, in place |
 | [0018](0018-text-normalization-and-metric-semantics.md) | Two Normalizers always run and neither is configurable — a minimal Tier A as the headline, OpenAI's vendored normalizer as the labelled second pass — scored by our own Levenshtein into WER/CER/SER, Pooled everywhere, with empty References retained and undefined per-Sample rates emitted as `null`. | |
+| [0019](0019-hypothesis-record-format.md) | A Run holds `hypotheses.jsonl` and `run.json`; one Record file covers every Split, denormalizing the Reference and every Breakdown attribute onto lines ordered by content-derived `id` — with `hypothesis: null` the sole failure marker, and the sentinel carrying a line count `score` checks. | |

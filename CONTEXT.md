@@ -184,6 +184,11 @@ alongside the provenance of the Run that produced it. Retained unmodified so Sco
 against it without re-running the model, the same relationship an Original has to its Normalized
 audio.
 _Avoid_: Cache, transcript file, hypothesis artifact ("artifact" is a category word here, not a name).
+_Note_: "alongside" is **not** on the same line or in the same file. **ADR-0019** puts the Record in
+`hypotheses.jsonl` and the Run's provenance in a sibling `run.json`, written last as the completeness
+sentinel — a header line could not be written last. The two files are one Run directory and one
+artifact in the sense meant here; neither is readable as a Run without the other. A line whose
+`hypothesis` is `null` is a **failed** Transcription, distinct from `""`, which is the model's output.
 
 **Scoring**:
 The derivation of Metrics from a Hypothesis Record and its References — **pure and byte-identical**
