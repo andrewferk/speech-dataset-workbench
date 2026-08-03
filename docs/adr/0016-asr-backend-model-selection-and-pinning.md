@@ -270,8 +270,10 @@ model-identifying fields within it:
 > *fields* — a set, not a spelling — and every one of them is present. Two placements also differ
 > from the reading this table invites: `language` sits in its own block beside `language_source`
 > rather than among `decode_params`, because a fact recorded twice can disagree with itself; and
-> `torch_num_threads` sits in `runtime` beside the host-architecture fields it shares its
-> reduction-order reason with.
+> `torch_num_threads` sits in `runtime` rather than among the decode parameters, because it is a
+> property of the execution environment, not of the search. It shares its reduction-order reason
+> with the host-architecture fields, but those sit in a separate `host` block — the reason spans the
+> two blocks; the fields are not adjacent.
 
 | Field | Value |
 | --- | --- |
