@@ -181,6 +181,13 @@ therefore free of the three arbitrary constants ADR-0022 objected to.
 speech, so a Transcription of them produces meaningless output and a floor measured over them would
 be a number about nothing. This is an operator instruction, not a test.
 
+> **Amended by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** The floor is measured before
+> `v0.2.0`, so v0.3 inherits a number rather than this debt. The paragraph above still holds — it is
+> not a *CI* criterion, and cannot be — but ADR-0026's one-time manual gate is real speech on a real
+> model, which is the venue this recipe requires and the **only** one the project ever has: CI never
+> loads the model, and the example has no speech. Deferring it to v0.3 as assigned here would leave
+> v0.3 needing a v0.2-era number with no way to obtain one.
+
 ### The comparison lives in `diff` and `jq`, documented as a recipe
 
 v0.2 ships **no additional surface**. Comparing two Runs is:

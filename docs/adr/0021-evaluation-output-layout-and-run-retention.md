@@ -224,6 +224,15 @@ to produce a notice `ls` already gives.
 
 **ADR-0012's allowlist is untouched, `.gitignore` gains nothing, and no CI check is added.**
 
+> **Amended by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** The allowlist **is** extended,
+> to `hypotheses.jsonl` ⊆ `examples/` + `tests/fixtures/`. Both rejections below assume the check
+> would be a **prohibition**; ADR-0012's Check 2 is an **allowlist**, under which a committed golden
+> is an entry rather than a hole. The format-policing objection was aimed at `.mp3`/`.m4a` — *input*
+> formats the tool hard-aborts on — where the check would conflate a privacy breach with a bad input;
+> `hypotheses.jsonl` is an artifact `sdw` emits, whose sensitive-text class this section was the first
+> to identify. The finding below is unchanged and is what ADR-0026 acts on. `.gitignore` still gains
+> nothing, and `run.json` is deliberately **not** covered.
+
 On its own terms this is quick: evaluation emits **no audio**, so a check asserting that tracked
 `*.wav` files are a subset of `examples/data-in/` and `tests/fixtures/` has nothing to say about a
 Run directory. And `--eval-out` is an explicit external path exactly as `--data-out` is, so it needs
@@ -371,6 +380,11 @@ class enforced rather than documented, on the strongest available precedent. Rej
 the format-policing ADR-0012 already refused, and because it collides on day one with #138's
 committed Scoring golden, which is exactly a tracked `hypotheses.jsonl`. A gate that must be holed
 before it lands is not the mechanism this needs.
+
+> **Overturned by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** *Forbid* is the error in this
+> entry: ADR-0012's check allowlists rather than prohibits, so the Scoring golden is an entry in it
+> and no hole is required. ADR-0026 extends it to `hypotheses.jsonl` ⊆ `examples/` +
+> `tests/fixtures/` — two legitimate entries now, since `examples/` gains a committed Run of its own.
 
 **A `.gitignore` entry for a conventional eval output path** — cheap insurance against an operator
 running the tool inside the repo. Rejected because it invents a conventional path where the design
