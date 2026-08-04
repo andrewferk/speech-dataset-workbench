@@ -99,6 +99,17 @@ mode and then not testing for it would be the same unchecked prose in a new plac
 The install itself needs no check: `uv run pytest` imports `sdw`, so a broken install fails the
 suite immediately.
 
+> **Amended by ADR-0023 (v0.2).** This step now carries a **fourth** property it was not written
+> for. v0.2 puts the ASR dependencies behind an optional `asr` extra, and CI's `check` job installs
+> no extra — so `sdw --help` here also asserts that the **full subcommand table builds with the ASR
+> dependencies absent**, which is what makes ADR-0017's torch-free `score` a fact about the
+> repository rather than a sentence in an ADR. The step is unchanged; this note records the property
+> so a future edit knows what it would be deleting.
+>
+> *"The install itself needs no check"* now describes **one of two venvs**. The `asr` venv has no
+> equivalent backstop, because `check`'s suite never runs against it — the `mypy --strict` step in
+> ADR-0023's `asr` job is what proves that install worked.
+
 ## Consequences
 
 - All four `PYTHONPATH` rows are deleted. `pytest`, CI, mise, and a bare `uv run sdw` all work with
