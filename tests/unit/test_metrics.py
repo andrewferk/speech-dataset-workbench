@@ -11,17 +11,19 @@ disagreement in the suite is the backtrace tie-break, which is ours by decision 
 checked against `jiwer` alone — an empty normalized Reference, and an empty against an empty.
 """
 
+import inspect
+
 import pytest
 
-from sdw.score.metrics import SampleScore, score_sample
+from sdw.score.metrics import SampleMetrics, score_sample
 from sdw.score.text_normalization import TIER_A, TIER_B, tier_a, tier_b
 
 
-def _tier_a(reference: str, hypothesis: str) -> SampleScore:
+def _tier_a(reference: str, hypothesis: str) -> SampleMetrics:
     return score_sample(reference, hypothesis)[TIER_A]
 
 
-def _tier_b(reference: str, hypothesis: str) -> SampleScore:
+def _tier_b(reference: str, hypothesis: str) -> SampleMetrics:
     return score_sample(reference, hypothesis)[TIER_B]
 
 
@@ -30,16 +32,16 @@ class TestWordErrorRate:
 
     def test_one_wrong_word_in_four(self) -> None:
         # `the quick brown fox` against `the quick brown box`: one substitution over four tokens.
-        score = _tier_a("The quick brown fox.", "The quick brown box!")
-        assert score.words == (1, 0, 0, 4)
-        assert score.word_error_rate == 0.25
+        metrics = _tier_a("The quick brown fox.", "The quick brown box!")
+        assert metrics.words == (1, 0, 0, 4)
+        assert metrics.word_error_rate == 0.25
 
     def test_tokens_are_whitespace_separated(self) -> None:
         # The Normalizer guarantees single-space separation, so `hello world` is two tokens and not
         # the one a literal-space tokenizer reads out of a surviving tab (ADR-0018's 200% trap).
-        score = _tier_a("hello\tworld", "hello world")
-        assert score.words == (0, 0, 0, 2)
-        assert score.word_error_rate == 0.0
+        metrics = _tier_a("hello\tworld", "hello world")
+        assert metrics.words == (0, 0, 0, 2)
+        assert metrics.word_error_rate == 0.0
 
 
 class TestCharacterErrorRate:
@@ -47,25 +49,25 @@ class TestCharacterErrorRate:
 
     def test_one_wrong_character_in_nineteen(self) -> None:
         # `the quick brown fox` and `the quick brown box` are both 19 characters and differ in one.
-        score = _tier_a("The quick brown fox.", "The quick brown box!")
-        assert score.characters == (1, 0, 0, 19)
-        assert score.character_error_rate == 1 / 19
+        metrics = _tier_a("The quick brown fox.", "The quick brown box!")
+        assert metrics.characters == (1, 0, 0, 19)
+        assert metrics.character_error_rate == 1 / 19
 
     def test_the_space_counts_as_a_character(self) -> None:
         # Excluding it would make CER blind to word-boundary errors — a real class on a prompted
         # corpus (ADR-0018). `co worker` against `coworker` is one deletion over nine characters.
-        score = _tier_a("co-worker", "coworker")
-        assert score.characters == (0, 1, 0, 9)
-        assert score.character_error_rate == 1 / 9
+        metrics = _tier_a("co-worker", "coworker")
+        assert metrics.characters == (0, 1, 0, 9)
+        assert metrics.character_error_rate == 1 / 9
 
     def test_it_is_its_own_alignment_and_not_derivable_from_the_word_counts(self) -> None:
         # One substituted word is one word error and however many character errors the words
         # actually differ by, which is why both sets of counts are emitted (ADR-0018).
         # `the cat` against `the elephant`: one substituted word, and at character level the `a`
         # and the `t` survive as matches, so `c`→`e` is a substitution and five characters insert.
-        score = _tier_a("the cat", "the elephant")
-        assert score.words == (1, 0, 0, 2)
-        assert score.characters == (1, 0, 5, 7)
+        metrics = _tier_a("the cat", "the elephant")
+        assert metrics.words == (1, 0, 0, 2)
+        assert metrics.characters == (1, 0, 5, 7)
 
 
 class TestSentenceErrorRate:
@@ -74,14 +76,12 @@ class TestSentenceErrorRate:
     def test_identical_normalized_text_is_correct(self) -> None:
         # Text Normalization is what makes this an equivalence rather than a string compare: the
         # punctuation and case differ and the Sample is still correct.
-        score = _tier_a("Hello, world!", "hello world")
-        assert score.sentence_error is False
-        assert score.sentence_error_rate == 0.0
+        metrics = _tier_a("Hello, world!", "hello world")
+        assert metrics.sentence_error is False
 
     def test_any_difference_at_all_is_an_error(self) -> None:
-        score = _tier_a("hello world", "hello word")
-        assert score.sentence_error is True
-        assert score.sentence_error_rate == 1.0
+        metrics = _tier_a("hello world", "hello word")
+        assert metrics.sentence_error is True
 
 
 class TestDegenerateInputs:
@@ -92,50 +92,60 @@ class TestDegenerateInputs:
         # `hello` is one insertion against no tokens and five against no characters; the rates are
         # undefined, and the counts are exactly what Pooling adds to a zero denominator.
         assert (tier_b("Um."), tier_b("Um hello.")) == ("", "hello")
-        score = _tier_b("Um.", "Um hello.")
-        assert score.words == (0, 0, 1, 0)
-        assert score.characters == (0, 0, 5, 0)
-        assert score.word_error_rate is None
-        assert score.character_error_rate is None
-        assert score.sentence_error is True
+        metrics = _tier_b("Um.", "Um hello.")
+        assert metrics.words == (0, 0, 1, 0)
+        assert metrics.characters == (0, 0, 5, 0)
+        assert metrics.word_error_rate is None
+        assert metrics.character_error_rate is None
+        assert metrics.sentence_error is True
 
     def test_empty_reference_against_an_empty_hypothesis_scores_ser_correct(self) -> None:
         # The row that decides SER's denominator is pairs rather than tokens: nothing was said and
         # nothing was heard, so the Sample is *correct* while WER and CER stay undefined.
         assert (tier_b("Um."), tier_b("Uh.")) == ("", "")
-        score = _tier_b("Um.", "Uh.")
-        assert score.words == (0, 0, 0, 0)
-        assert score.characters == (0, 0, 0, 0)
-        assert score.word_error_rate is None
-        assert score.character_error_rate is None
-        assert score.sentence_error is False
-        assert score.sentence_error_rate == 0.0
+        metrics = _tier_b("Um.", "Uh.")
+        assert metrics.words == (0, 0, 0, 0)
+        assert metrics.characters == (0, 0, 0, 0)
+        assert metrics.word_error_rate is None
+        assert metrics.character_error_rate is None
+        assert metrics.sentence_error is False
 
     def test_a_non_empty_reference_against_an_empty_hypothesis_rates_at_one(self) -> None:
         # An empty Hypothesis is the model's output and is scored; a *failed* Sample is the absence
         # of output and gets no row at all. The two must not land on the same number (ADR-0018).
-        score = _tier_a("Hello world.", "")
-        assert score.words == (0, 2, 0, 2)
-        assert score.characters == (0, 11, 0, 11)
-        assert score.word_error_rate == 1.0
-        assert score.character_error_rate == 1.0
+        metrics = _tier_a("Hello world.", "")
+        assert metrics.words == (0, 2, 0, 2)
+        assert metrics.characters == (0, 11, 0, 11)
+        assert metrics.word_error_rate == 1.0
+        assert metrics.character_error_rate == 1.0
 
     def test_a_rate_above_one_is_reported_as_computed(self) -> None:
         # `go` against `go on then now please`: four inserted tokens over one, and nineteen
         # inserted characters over two. There is no clamp anywhere — a runaway decode is meant to
         # be visible as a number above 1.0 (ADR-0015, ADR-0016).
-        score = _tier_a("Go.", "Go on then now please.")
-        assert score.words == (0, 0, 4, 1)
-        assert score.characters == (0, 0, 19, 2)
-        assert score.word_error_rate == 4.0
-        assert score.character_error_rate == 9.5
+        metrics = _tier_a("Go.", "Go on then now please.")
+        assert metrics.words == (0, 0, 4, 1)
+        assert metrics.characters == (0, 0, 19, 2)
+        assert metrics.word_error_rate == 4.0
+        assert metrics.character_error_rate == 9.5
 
     def test_no_undefined_rate_is_a_sentinel_number(self) -> None:
         # `jiwer` returning a raw insertion count from a function documented to return a rate is
         # the failure this guards: a `null` propagates as an absence, a `0.0` or an `inf` as a lie.
-        score = _tier_b("Um.", "Um hello.")
-        for rate in (score.word_error_rate, score.character_error_rate):
+        metrics = _tier_b("Um.", "Um hello.")
+        for rate in (metrics.word_error_rate, metrics.character_error_rate):
             assert rate is None
+
+    def test_a_failed_sample_cannot_be_scored_at_all(self) -> None:
+        # The one row of the table whose value is not a number. A crashed decode wrote no
+        # Hypothesis, so there is no pair to align and the Sample gets no row — #159 owns reading
+        # that marker and #161 the N-of-M disclosure. What this layer owes the rule is the absence
+        # of a path: scoring takes a `str`, so a missing Hypothesis cannot arrive disguised as an
+        # empty one, which would score N deletions and make a crash indistinguishable from silence.
+        assert [p.annotation for p in inspect.signature(score_sample).parameters.values()] == [
+            str,
+            str,
+        ]
 
 
 class TestBothTiers:
@@ -176,10 +186,10 @@ class TestBothTiers:
     def test_all_three_metrics_come_from_that_one_normalized_pair(self) -> None:
         # Not three normalizations: WER, CER and SER must not be able to disagree about what the
         # text was, or the SER binary could report correct while WER reports errors.
-        score = _tier_a("Hello, world!", "hello world")
-        assert score.words == (0, 0, 0, 2)
-        assert score.characters == (0, 0, 0, 11)
-        assert score.sentence_error is False
+        metrics = _tier_a("Hello, world!", "hello world")
+        assert metrics.words == (0, 0, 0, 2)
+        assert metrics.characters == (0, 0, 0, 11)
+        assert metrics.sentence_error is False
 
 
 class TestExactness:
@@ -188,17 +198,17 @@ class TestExactness:
     def test_rates_are_not_rounded_at_measurement(self) -> None:
         # Rounding is serialization's business at `RATIO_DP` (ADR-0007, ADR-0018); a rate rounded
         # here would be a measurement that cannot be recomputed from the counts beside it.
-        score = _tier_a("The quick brown fox.", "The quick brown box!")
-        assert score.character_error_rate == 1 / 19
+        metrics = _tier_a("The quick brown fox.", "The quick brown box!")
+        assert metrics.character_error_rate == 1 / 19
 
     def test_every_rate_is_recomputable_from_the_emitted_counts(self) -> None:
-        score = _tier_a("the cat sat", "a cat sat down")
-        assert score.word_error_rate == score.words.errors / score.words.reference_length
+        metrics = _tier_a("the cat sat", "a cat sat down")
+        assert metrics.word_error_rate == metrics.words.errors / metrics.words.reference_length
         assert (
-            score.character_error_rate
-            == score.characters.errors / score.characters.reference_length
+            metrics.character_error_rate
+            == metrics.characters.errors / metrics.characters.reference_length
         )
 
-    def test_a_score_is_frozen(self) -> None:
+    def test_a_samples_metrics_are_frozen(self) -> None:
         with pytest.raises(AttributeError):
             _tier_a("a", "a").sentence_error = True  # type: ignore[misc]

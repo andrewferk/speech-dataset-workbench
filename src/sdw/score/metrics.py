@@ -13,11 +13,8 @@ from sdw.score.text_normalization import NORMALIZERS
 
 
 @dataclass(frozen=True)
-class SampleScore:
-    """One Sample's three Metrics under one Normalizer, with the text they were computed from.
-
-    Field order is a Report's key order (ADR-0018), so reordering these is an output change.
-    """
+class SampleMetrics:
+    """One Sample's three Metrics under one Normalizer, with the text they were computed from."""
 
     reference: str
     hypothesis: str
@@ -35,28 +32,27 @@ class SampleScore:
         """`None` where the normalized Reference holds no characters — undefined, not zero."""
         return self.characters.rate
 
-    @property
-    def sentence_error_rate(self) -> float:
-        """Always defined: SER's denominator is pairs, and one Sample is one pair (ADR-0018)."""
-        return float(self.sentence_error)
 
-
-def score_sample(reference: str, hypothesis: str) -> Mapping[str, SampleScore]:
+def score_sample(reference: str, hypothesis: str) -> Mapping[str, SampleMetrics]:
     """Score one Reference/Hypothesis pair under every Normalizer, keyed by identity string.
 
     Both tiers always run, over the identical Sample: a Sample dropped under one tier — an empty
     normalized Reference is the case that arises — would end the paired B−A delta (ADR-0018).
-    Takes the Hypothesis a Record holds; a *failed* Sample has none and is never passed here.
     """
     return {
-        identity: _score(normalizer(reference), normalizer(hypothesis))
+        identity: _measure(normalizer(reference), normalizer(hypothesis))
         for identity, normalizer in NORMALIZERS.items()
     }
 
 
-def _score(reference: str, hypothesis: str) -> SampleScore:
-    """All three Metrics off the same normalized pair, so they cannot disagree about the text."""
-    return SampleScore(
+def _measure(reference: str, hypothesis: str) -> SampleMetrics:
+    """All three Metrics off the same normalized pair, so they cannot disagree about the text.
+
+    Takes the Hypothesis a Record holds, and only a `str`: a failed Sample has none and gets no row
+    at all, so widening this to accept its absence would score a crash as an empty Hypothesis —
+    which is the one reading ADR-0018 forbids, since the two would land on the same number.
+    """
+    return SampleMetrics(
         reference=reference,
         hypothesis=hypothesis,
         # `split()` over `split(" ")`, which reads `""` as one empty token. The Normalizer already

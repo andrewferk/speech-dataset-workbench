@@ -40,9 +40,7 @@ def align(reference: Sequence[str], hypothesis: Sequence[str]) -> Alignment:
     """Align two sequences of comparable items — tokens for WER, characters for CER.
 
     Reference runs along `i` and Hypothesis along `j`, so a step in `i` alone is a deletion and a
-    step in `j` alone an insertion. Among the steps achieving a cell's minimum the backtrace takes
-    diagonal, then deletion, then insertion — a contract obligation, since the total is the same
-    under any minimal path but the S/D/I split is not (ADR-0018).
+    step in `j` alone an insertion.
     """
     n, m = len(reference), len(hypothesis)
     cost = [[0] * (m + 1) for _ in range(n + 1)]
@@ -61,7 +59,9 @@ def align(reference: Sequence[str], hypothesis: Sequence[str]) -> Alignment:
     substitutions = deletions = insertions = 0
     i, j = n, m
     while i or j:
-        # The branch order *is* the tie-break; reordering these is an output change (ADR-0018).
+        # The branch order *is* the tie-break — diagonal, then deletion, then insertion, among the
+        # steps achieving this cell's minimum. Reordering them leaves every total untouched and
+        # changes the reported S/D/I split, which is an output change (ADR-0018).
         if i and j and cost[i][j] == cost[i - 1][j - 1] + (reference[i - 1] != hypothesis[j - 1]):
             substitutions += reference[i - 1] != hypothesis[j - 1]
             i, j = i - 1, j - 1
