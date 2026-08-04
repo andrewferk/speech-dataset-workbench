@@ -24,9 +24,8 @@ REFERENCE_NOTE = (
     "and a Sample where the speaker departed from the Prompt scores as an error"
 )
 
-# ADR-0022 header item 4, as shrunk by ADR-0024: Scope equality, ADR-0017's train/test honesty rule,
-# and the paired sentence — corrected by ADR-0024 to concede the unmeasured floor beneath a
-# cross-run delta. The tier headings below the header carry the rest of the rule.
+# ADR-0022 header item 4 (ADR-0024). The last sentence concedes an unmeasured floor and reads like
+# hedging to cut; the tier headings below the header carry the rest of the rule.
 COMPARABILITY_NOTE = (
     "compare only Runs of equal Scope; once a model has trained on train, only test is honest. "
     "The comparison this number exists for is paired against a Run over the same Samples, and "
