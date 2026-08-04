@@ -1,8 +1,9 @@
 """Dispatch is lazy: `sdw.cli` imports no command module at module level (ADR-0023).
 
-The rule is uniform across every command, so it has no sanctioned exception to erode. These
-tests derive the command modules from `cli.py` itself rather than naming them, so a command
-added later is covered without editing this file (ADR-0010).
+The rule is uniform across every command, so it has no sanctioned exception to erode. It is
+checked from the other side — what `cli.py` imports at module level must stay within the
+non-command modules named below — so a command added eagerly and never lazily, which is the
+erosion itself, fails here rather than going unnoticed.
 """
 
 import ast
@@ -17,68 +18,76 @@ from sdw.cli import main
 
 CLI_SOURCE = Path(sdw.__file__).parent / "cli.py"
 
+# Every `sdw.*` module `cli.py` may import at module level. A command module added here is the
+# violation this file exists to catch, so extending it is a decision, not a fix (ADR-0023).
+NON_COMMAND_MODULES = frozenset({"sdw.errors"})
 
-def _sdw_imports(depth: str) -> set[str]:
-    """The `sdw.*` modules `cli.py` imports at module level (`depth="module"`) or inside a
-    function body (`depth="function"`)."""
+
+def _sdw_modules(node: ast.AST) -> set[str]:
+    """The `sdw.*` modules one import statement names, relative forms resolved.
+
+    `cli.py` sits directly under `sdw`, so any relative import in it is rooted there.
+    """
+    if isinstance(node, ast.Import):
+        return {alias.name for alias in node.names if alias.name.startswith("sdw.")}
+    if not isinstance(node, ast.ImportFrom):
+        return set()
+    module = node.module if node.level == 0 else f"sdw.{node.module}" if node.module else "sdw"
+    if module == "sdw":
+        return {f"sdw.{alias.name}" for alias in node.names}
+    return {module} if module and module.startswith("sdw.") else set()
+
+
+def _imported_sdw_modules(*, nested: bool) -> set[str]:
+    """The `sdw.*` modules `cli.py` imports inside a function body (`nested=True`) or at
+    module level (`nested=False`)."""
     tree = ast.parse(CLI_SOURCE.read_text())
-    nested = {
+    in_function = {
         node
         for parent in ast.walk(tree)
         if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef)
         for node in ast.walk(parent)
     }
-    names: set[str] = set()
+    modules: set[str] = set()
     for node in ast.walk(tree):
-        if depth == "function" and node not in nested:
-            continue
-        if depth == "module" and node in nested:
-            continue
-        if isinstance(node, ast.ImportFrom) and node.module and node.level == 0:
-            for alias in node.names:
-                qualified = f"{node.module}.{alias.name}"
-                if node.module == "sdw":
-                    names.add(qualified)
-                elif node.module.startswith("sdw."):
-                    names.add(node.module)
-        elif isinstance(node, ast.Import):
-            names.update(a.name for a in node.names if a.name.startswith("sdw."))
-    return names
+        if (node in in_function) is nested:
+            modules |= _sdw_modules(node)
+    return modules
 
 
-COMMAND_MODULES = sorted(_sdw_imports("function"))
+def _modules_loaded_by(probe: str) -> set[str]:
+    """Everything in `sys.modules` after running `probe` in a fresh interpreter."""
+    result = subprocess.run(
+        [sys.executable, "-c", f"{probe}\nimport sys; print('\\n'.join(sorted(sys.modules)))"],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return set(result.stdout.split())
 
 
-def test_there_is_at_least_one_dispatch_branch_import() -> None:
-    # Guards the two tests below: they are vacuous if the derivation finds nothing.
+COMMAND_MODULES = sorted(_imported_sdw_modules(nested=True))
+
+
+def test_the_cli_imports_no_command_module_at_module_level() -> None:
+    assert _imported_sdw_modules(nested=False) <= NON_COMMAND_MODULES
+
+
+def test_every_command_has_a_dispatch_branch_import() -> None:
+    # Guards the parametrized tests below, which are vacuous over an empty list.
     assert COMMAND_MODULES
 
 
 @pytest.mark.parametrize("module", COMMAND_MODULES)
-def test_a_command_module_is_not_also_imported_at_module_level(module: str) -> None:
-    assert module not in _sdw_imports("module")
-
-
-def test_importing_the_cli_pulls_in_no_command_module() -> None:
+def test_importing_the_cli_pulls_in_no_command_module(module: str) -> None:
     # Transitive, and over the real import: a command module reached through some other
-    # module-level import would satisfy the AST check above and still cost `--help` the load.
-    probe = "import sdw.cli, sys; print('\\n'.join(sorted(sys.modules)))"
-    result = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
-    )
-    loaded = set(result.stdout.split())
-    assert not loaded.intersection(COMMAND_MODULES)
+    # module-level import passes the AST check above and still costs `--help` the load.
+    assert module not in _modules_loaded_by("import sdw.cli")
 
 
-def test_the_parser_is_built_without_importing_a_command_module() -> None:
-    probe = (
-        "from sdw.cli import _parser; import sys; _parser(); print('\\n'.join(sorted(sys.modules)))"
-    )
-    result = subprocess.run(
-        [sys.executable, "-c", probe], capture_output=True, text=True, check=True
-    )
-    loaded = set(result.stdout.split())
-    assert not loaded.intersection(COMMAND_MODULES)
+@pytest.mark.parametrize("module", COMMAND_MODULES)
+def test_the_parser_is_built_without_importing_a_command_module(module: str) -> None:
+    assert module not in _modules_loaded_by("from sdw.cli import _parser; _parser()")
 
 
 @pytest.mark.parametrize("argv", [[], ["build"], ["validate"]], ids=["sdw", "build", "validate"])
