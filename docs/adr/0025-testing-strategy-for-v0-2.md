@@ -38,8 +38,8 @@ exhaustively.
 ### Scoring — ADR-0008 inherited wholesale, enabled by committed Run fixtures
 
 Exact goldens, no tolerances, no per-field machinery. The enabler is **committed Run fixtures**,
-which make the entire normalization / metric / Breakdown / Report path testable with no model, no
-weights, and no network.
+which make the entire Text Normalization / metric / Breakdown / Report path testable with no model,
+no weights, and no network.
 
 **They are hand-authored, and generator-free.**
 
@@ -240,7 +240,7 @@ ADR-0008's table-driven abort suite gains the v0.2 refusals, each asserting a no
 Samples, and ADR-0018's Scope with zero total Reference tokens. These are Scoring aborts, so they run
 in `check` with the rest.
 
-The two-layer split is unchanged and needs no decision: metric math, normalization, the Levenshtein
+The two-layer split is unchanged and needs no decision: metric math, Text Normalization, the Levenshtein
 scorer, the Breakdown grouping and the import graph are units; a `score` invocation captured as a
 stream and a `transcribe` invocation writing a Run are e2e, because a captured stream is only well
 defined through the CLI.
@@ -252,7 +252,7 @@ Extending ADR-0008's tree:
 ```
 tests/
   synth.py                    # unchanged — audio only
-  unit/                       # + normalization tiers, Levenshtein, metrics, Breakdowns, import graph
+  unit/                       # + Text Normalization tiers, Levenshtein, metrics, Breakdowns, imports
   e2e/                        # + score goldens, the fake-backend transcribe run
   fixtures/
     reference/                # unchanged — the committed --data-in
@@ -336,7 +336,7 @@ entries this ADR's own choices create.
   would compute the expected values it is meant to check, converting every golden from a test of the
   arithmetic into a test of the code's agreement with itself.
 - **Capturing fixtures from a real `transcribe` run** — rejected: the tones contain no speech, so the
-  captured Record could not contain a WER above 1.0, a firing normalization rule, or any case chosen
+  captured Record could not contain a WER above 1.0, a firing Text Normalization rule, or any case chosen
   rather than observed; and re-capturing would need a 1.6 GB download.
 - **A tiny model in CI with structural-only assertions** — rejected: it requires ADR-0016 to
   reintroduce checkpoint selectability, adds weights to every run, and still asserts nothing about
