@@ -69,12 +69,14 @@ the backtrace tie-break is pinned rather than assumed, and both tiers over the s
 delta is pinned too. That list is inherited whole, not restated selectively — it is a floor, and this
 ADR does not get to lower it.
 
-**This ADR adds three cases on top of it**, each falling out of a decision ADR-0018 had not yet made:
-an empty Text-Normalized Reference against a *non-empty* Hypothesis (per-Sample `null`, insertions
-pooled against a zero denominator) and empty against empty (`null`, and SER *correct*) — the two
-halves of ADR-0018's degenerate-input table that its own minimum leaves implicit; and a
-`hypothesis: null` failure driving ADR-0019's N-of-M disclosure, which is a Record-format case rather
-than a metric one.
+**This ADR adds three cases on top of it — as coverage, not as decisions.** ADR-0018's
+degenerate-input table already decided every rule at issue; what its Consequences left open was which
+rows a *fixture* has to exercise, and on three of them the answer here is one the floor does not
+compel: an empty Text-Normalized Reference against a *non-empty* Hypothesis (per-Sample `null`,
+insertions pooled against a zero denominator), empty against empty (`null`, and SER *correct*), and a
+`hypothesis: null` failure — excluded from the rows and disclosed N-of-M under ADR-0017's policy,
+which makes it a Record-format case rather than a metric one. Each is a row of that table given a
+fixture; none of them is a new decision.
 
 A Scope with zero total Reference tokens must **refuse to emit**, so it belongs in the abort table
 below rather than the golden set.
