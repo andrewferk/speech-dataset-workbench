@@ -27,8 +27,11 @@ DECODE_FAILED = "decode_failed"
 
 
 @dataclass(frozen=True)
-class Hypothesis:
-    """One Record line, with the fields in ADR-0019's fixed key order.
+class RecordLine:
+    """One line of the Hypothesis Record, with the fields in ADR-0019's fixed key order.
+
+    Not named `Hypothesis`: the glossary reserves that for the text a model emits, which here is one
+    field of the line rather than the line itself.
 
     Field order here *is* the emitted key order — :func:`_line` reads it off the dataclass — so the
     two cannot drift. `hypothesis` is `null` **iff** Transcription failed; `""` is the model saying
@@ -49,12 +52,12 @@ class Hypothesis:
     long_form: bool
 
 
-def transcribed(sample: Sample, *, hypothesis: str, long_form: bool) -> Hypothesis:
+def transcribed(sample: Sample, *, hypothesis: str, long_form: bool) -> RecordLine:
     """The line for a Sample the model answered for, empty answer included."""
     return _line_of(sample, hypothesis=hypothesis, error=None, long_form=long_form)
 
 
-def failed(sample: Sample, *, long_form: bool) -> Hypothesis:
+def failed(sample: Sample, *, long_form: bool) -> RecordLine:
     """The line for a Sample whose decode raised.
 
     Present, not absent, and carrying every other field: a Report that cannot say *which* Sessions
@@ -77,8 +80,8 @@ class RecordWriter:
         self._handle = path.open("w", encoding=ENCODING, newline="\n")
         self.line_count = 0
 
-    def append(self, hypothesis: Hypothesis) -> None:
-        self._handle.write(render_jsonl([_line(hypothesis)]))
+    def append(self, line: RecordLine) -> None:
+        self._handle.write(render_jsonl([_line(line)]))
         # Per line, not per Run: a crash must leave a valid prefix, not a buffer (ADR-0019).
         self._handle.flush()
         self.line_count += 1
@@ -97,8 +100,8 @@ class RecordWriter:
 
 def _line_of(
     sample: Sample, *, hypothesis: str | None, error: str | None, long_form: bool
-) -> Hypothesis:
-    return Hypothesis(
+) -> RecordLine:
+    return RecordLine(
         id=sample.id,
         reference=sample.reference,
         hypothesis=hypothesis,
@@ -114,6 +117,6 @@ def _line_of(
     )
 
 
-def _line(hypothesis: Hypothesis) -> dict[str, Any]:
-    """The Record line: every field, in :class:`Hypothesis`'s declared order."""
-    return {field.name: getattr(hypothesis, field.name) for field in fields(hypothesis)}
+def _line(line: RecordLine) -> dict[str, Any]:
+    """Every field, in :class:`RecordLine`'s declared order."""
+    return {field.name: getattr(line, field.name) for field in fields(line)}

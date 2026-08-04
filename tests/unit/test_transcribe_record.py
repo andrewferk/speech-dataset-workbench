@@ -44,7 +44,7 @@ SAMPLE = Sample(
 )
 
 
-def _written(tmp_path: Path, *lines: record.Hypothesis) -> list[dict[str, object]]:
+def _written(tmp_path: Path, *lines: record.RecordLine) -> list[dict[str, object]]:
     path = tmp_path / record.RECORD_NAME
     with record.RecordWriter(path) as writer:
         for line in lines:

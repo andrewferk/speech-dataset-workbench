@@ -84,7 +84,7 @@ def _transcribed(
     backend: Backend,
     *,
     long_form: bool,
-) -> record.Hypothesis:
+) -> record.RecordLine:
     """One Sample transcribed, or recorded as failed — a per-Sample failure never aborts the Run.
 
     The exception's detail reaches stderr and nowhere else: free text in `error` would put absolute
