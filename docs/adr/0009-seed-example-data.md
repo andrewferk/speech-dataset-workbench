@@ -81,6 +81,16 @@ and "example CSV" are the same artifact (which is what ADR-0002's *code repo = c
 prompts only* permits). Nothing needs keeping in sync, and no committed CSV hard-aborts if built
 as-is.
 
+> **Amended by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** `examples/` grows a second
+> half: a committed **Evaluation Run** (`hypotheses.jsonl` + `run.json`) produced by really running
+> ADR-0016's pinned model over this input set, so `sdw score` demonstrates evaluation with no
+> downloads and no torch. The tones make its numbers garbage, and that is the content — it is this
+> ADR's one-deliberate-`low_volume`-flag move applied to ADR-0018's never-clamp rule. **`transcribe`
+> gets no runnable example and cannot**: demonstrating it needs speech, which ADR-0002 and the
+> allowlist above keep out of git. That is recorded as a negative result rather than a gap, and TTS
+> is rejected on the record. The "bring your own" half above is now the *only* route to a meaningful
+> Evaluation, which raises its stakes.
+
 ## Amendment to ADR-0008
 
 A test regenerates the examples into a tmpdir and **byte-compares against the committed

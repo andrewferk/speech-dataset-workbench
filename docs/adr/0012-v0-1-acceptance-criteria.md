@@ -19,6 +19,13 @@ v0.1 is **done** when all of the following hold:
 3. **A human has walked `examples/README.md` once** on a clean clone (see *The manual gate*).
 4. **`v0.1.0` is tagged.**
 
+> **Inherited by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** v0.2's definition of done
+> holds this one **by reference** rather than restating it — restating would be the second source of
+> truth this section is largely about — and adds ADR-0023's `asr` CI job, two `examples/` checks over
+> a committed Evaluation Run, four fixtures, and its own one-time gate. This section's structure is
+> reused verbatim, including the refusal to enumerate: ADR-0015–0025 amend one another considerably
+> more than 0001–0011 did, so the checklist objection lands harder there than it did here.
+
 There is deliberately **no ADR-indexed checklist** — no eleven-line table pairing each ADR with its
 observable. The ADRs already amend one another (0001 by 0003 and 0010; 0006 by 0010; 0008 by 0009;
 0004 by #19; 0009 by this ADR), and that was true before a line of code existed. A checklist
@@ -91,6 +98,16 @@ stage's job.
 
 When someone has a legitimate reason to commit audio, they edit the allowlist. That edit is where
 the conversation happens; it is a feature of the design, not friction in it.
+
+> **Extended by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** The check gains a second file
+> type: tracked `hypotheses.jsonl` must be a subset of `examples/` and `tests/fixtures/`. ADR-0021
+> found that a Hypothesis Record is the first artifact `sdw` emits containing *what a speaker actually
+> said* rather than the authored Prompt, and then rejected this extension as the format-policing the
+> paragraph above refuses — reading the check as a prohibition rather than the **allowlist** it is.
+> The `.mp3`/`.m4a` argument above is unaffected and still holds: those are *inputs* the tool
+> hard-aborts on, where `hypotheses.jsonl` is an *output* with a real sensitive-text class.
+> `run.json` is deliberately not covered, having no speaker-derived text; a redirected Report is
+> unpoliceable by construction and is an accepted exception on ADR-0026's list.
 
 ### Check 3 — the audit recipe
 

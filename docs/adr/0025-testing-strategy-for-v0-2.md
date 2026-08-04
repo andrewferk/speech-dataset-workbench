@@ -69,6 +69,15 @@ the backtrace tie-break is pinned rather than assumed, and both tiers over the s
 delta is pinned too. That list is inherited whole, not restated selectively — it is a floor, and this
 ADR does not get to lower it.
 
+> **Raised by [ADR-0026](0026-v0-2-acceptance-criteria.md) (#139).** Four cases join the floor, found
+> by writing down what nothing exercises: a **truncated Record** tripping ADR-0019's
+> `record_line_count` hard error, a **missing `run.json`** (the crashed Run ADR-0021 then decided to
+> let accumulate), a **non-zero `long_form` count** — every fixture here prints zero, so the branch
+> that *reports* an over-length Sample is unexercised while its absence is goldened — and a
+> **`hypothesis: null` line reaching the N-of-M disclosure**. All four are coverage, not decisions:
+> ADR-0018's table is about scoring math, and these are about the Record's integrity and disclosure
+> surface, which no table had claimed.
+
 **This ADR adds three cases on top of it — as coverage, not as decisions.** ADR-0018's
 degenerate-input table already decided every rule at issue; what its Consequences left open was which
 rows a *fixture* has to exercise, and on three of them the answer here is one the floor does not
