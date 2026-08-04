@@ -279,7 +279,7 @@ Nothing here changes `run.json`, `hypotheses.jsonl`, `dataset.json`, any Metric,
 ## Consequences
 
 - `diff <(sdw score --run A) <(sdw score --run B)` applies **every tier check** of ADR-0020's
-  comparability rule — the whole rule except its one escalation, which the next bullet states. The
+  comparability rule — the whole rule except its one escalation, stated in the third bullet below. The
   tool ships a cross-run comparison surface and it is two shell redirections.
 - A Report that omitted its model could compare two different models and look rigorous doing it. It
   cannot any more, and the fix costs no command, no flag and no number.
