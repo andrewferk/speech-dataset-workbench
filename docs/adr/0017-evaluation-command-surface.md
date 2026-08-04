@@ -128,6 +128,14 @@ invocation; and pointing at a directory again leaves the layout inside it to #13
 > semantics, so leaving their names to a later ADR would hand #135 a decision it could only
 > rubber-stamp. The same applies to the "root that holds Runs" sentence above.
 
+> **Amended by ADR-0021 (#135): a Run directory is *"Record, provenance"* — there is no Report in
+> it.** The sentence above lists three members because, when it was written, "where #136's Report
+> lands" was still open and inside the Run was the obvious place. ADR-0021 decides the Report is
+> **never written to disk at all**: `sdw score` emits it to stdout and persists nothing, so a Run
+> directory holds exactly ADR-0019's two files for its whole life. *Self-contained* survives intact
+> — it is in fact stronger, since the directory is now not merely sufficient for re-scoring but
+> **immutable** once `transcribe` finishes, `score` being a pure reader.
+
 ### The Hypothesis Record is Scoring's only input
 
 **`score` never opens the dataset.** It reads one Run directory and nothing else.

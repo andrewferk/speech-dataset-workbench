@@ -254,6 +254,10 @@ The emitted record of a Run: its Metrics, its Breakdowns, and the provenance att
 operator-facing artifact, like the Quality report — the Manifest carries no evaluation fields, and
 Evaluation output never lands in `--data-out`.
 _Avoid_: Results, scorecard, summary.
+_Note_: "emitted record" is **not** a file. Per **ADR-0021**, `sdw score` writes nothing to disk — a
+Report is emitted to **stdout** and never persisted by the tool, and a Run directory never contains
+one. A Report is cheap and pure where a Hypothesis Record is expensive and irreproducible, so it is
+regenerated rather than retained. An operator's redirected copy is their artifact, not `sdw`'s.
 
 **Breakdown**:
 A Metric computed over a group of Samples sharing an attribute value — one Session, one Prompt, one
