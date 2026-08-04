@@ -54,6 +54,13 @@ Two costs are accepted on the record. The happy path is **two invocations**, not
 `build`: they are the two halves of one act, which is a different kind of addition than the `verify`
 command #8 rejected for serving *"an audit need a single technical user doesn't have."*
 
+> **Amended by ADR-0023 (#137): the extra is named `asr`, not `eval`.** Wherever this ADR says
+> *"the eval extra"* — above, and again under *Consequences* — read **the `asr` extra**. The phrase
+> here was forward-looking shorthand written while #137 was still open; #137 settled the name, and
+> `sdw[eval]` is not an install token that exists. The property is untouched: `sdw score` still runs
+> in a venv with that extra absent, and ADR-0023 makes it CI's `check` job, which installs no extra
+> at all.
+
 ### Evaluation Scope — transcribe everything, choose the view at Scoring
 
 **`transcribe` covers the entire Dataset Version. It has no Scope flag.** `score --split` (default:
