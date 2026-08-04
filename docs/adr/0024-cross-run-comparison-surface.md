@@ -97,8 +97,18 @@ Dataset — must match, or escalate to a masked diff of the two Records
 Disclosed — may differ; the same question under different arithmetic
   runtime    transformers 5.14.1 · torch 2.13.0 · py 3.12.7 · cpu · float32 · sdpa · 8 threads
   host       arm64 · Darwin
-  tool       built 0.1.0 · transcribed 0.2.0 · scored 0.2.0
+  tool       transcribed 0.2.0
 ```
+
+**That `tool` row carries one of ADR-0020's three `tool_version` occurrences, not three.** The tier
+table assigns `tool_version` — `run.json`'s top-level value, which by ADR-0020's own rule *"names the
+tool that wrote **this** file"* — and that is the tool that **transcribed**. The other two are not
+this tier's to print: **scored** is Report-side provenance, which ADR-0020 sent to #136 and ADR-0022
+placed at header item 5, where this ADR leaves it unchanged; **built** is `dataset.tool_version`,
+which ADR-0020's table assigns to no tier at all. Neither is lost — the JSON rendering echoes
+`run.json` verbatim, so `dataset.tool_version` is there in full, and the digest omits it exactly as it
+omits the *never relevant* tier. Printing all three under **Disclosed** would have asserted a tiering
+ADR-0020 does not state, which is the one thing this ADR promised not to do.
 
 Verbatim would have been the smaller amendment, and is rejected because a digest exists to be read:
 the tier labels turn the rule from a paragraph sitting beside unlabelled facts into the structure the
