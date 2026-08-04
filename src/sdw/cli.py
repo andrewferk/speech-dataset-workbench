@@ -1,6 +1,6 @@
 """Argument parsing for the `sdw` command.
 
-Two commands, and the mapping from an outcome to an exit code:
+The commands, and the mapping from an outcome to an exit code:
 
 - success → 0
 - a hard error → 1 (aborted; no durable output)
@@ -43,6 +43,26 @@ def _parser() -> argparse.ArgumentParser:
         help="Preflight --data-in and print the quality digest. Writes nothing.",
     )
 
+    # `score` shares nothing with the two dataset commands: no --data-in, no --config, and no
+    # dataset argument of any kind — one Run directory and nothing else (ADR-0017/ADR-0018).
+    score = subcommands.add_parser(
+        "score",
+        help="Score a Run directory and print the Evaluation Report to stdout. Writes nothing.",
+    )
+    score.add_argument("--run", type=Path, required=True, help="Run directory. Read-only.")
+    score.add_argument(
+        "--split",
+        help="Evaluation Scope: one Split. Default: every Split present.",
+    )
+    score.add_argument(
+        "--format",
+        # The tokens `sdw.score.command.RENDERINGS` keys on; named here because the parser is built
+        # before dispatch, and importing a command module to build it is what ADR-0023 forbids.
+        choices=("text", "json"),
+        default="text",
+        help="Rendering of the one Report (default: text).",
+    )
+
     return parser
 
 
@@ -55,6 +75,10 @@ def main(argv: list[str] | None = None) -> int:
             from sdw import pipeline
 
             pipeline.build(data_in=args.data_in, data_out=args.data_out, config=args.config)
+        elif args.command == "score":
+            from sdw.score import command
+
+            command.score(run_dir=args.run, split=args.split, output_format=args.format)
         else:
             from sdw import pipeline
 

@@ -11,10 +11,13 @@ single way, so the table reads as "the same good input, made bad." The classes a
 enumerates: an undecodable Original, a zero-frame WAV, a malformed `recordings.csv`, a `path` that
 escapes `--data-in` (absolute and `..`-traversal, the two mechanisms ADR-0006 names), and an illegal
 split ratio (both a wrong sum and a non-positive ratio, the two ADR-0004 rejects).
+
+`score`'s own refusals extend the table at the foot of this file (ADR-0025).
 """
 
 from __future__ import annotations
 
+import shutil
 from collections.abc import Callable
 from pathlib import Path
 from typing import NamedTuple
@@ -139,3 +142,59 @@ def test_the_abort_names_its_cause_on_stderr(
 
     assert exit_code != 0
     assert case.error_fragment in capsys.readouterr().err
+
+
+# --- score's refusals -----------------------------------------------------------------------------
+#
+# The table extends to v0.2's Scoring aborts (ADR-0025). `score` writes nothing anywhere, so the
+# "no durable output" half of the contract above has nothing to assert — what is left is a non-zero
+# exit and a named cause. Both cases break a copy of the committed `clean` Run a single way, which
+# is the same "the same good input, made bad" shape the build rows use.
+
+RUNS = Path(__file__).parents[1] / "fixtures" / "runs"
+
+# A `break` here mutates a copied Run directory in place.
+BreakRun = Callable[[Path], None]
+
+
+def _no_sentinel(run_dir: Path) -> None:
+    # A Run that crashed before `run.json` landed. ADR-0017 writes provenance last precisely so this
+    # state is distinguishable, and ADR-0021 then decided such Runs accumulate on disk forever —
+    # so refusing them by name is the only thing standing between a crash and a Report over a
+    # partial Record.
+    (run_dir / "run.json").unlink()
+
+
+def _truncated_record(run_dir: Path) -> None:
+    # A Record truncated *after* the Run finished — a full disk, a partial copy, an editor. Without
+    # `record_line_count` it is indistinguishable from a shorter corpus, and the outcome is the one
+    # thing ADR-0017's N-of-M disclosure exists to prevent (ADR-0019).
+    record = run_dir / "hypotheses.jsonl"
+    kept = record.read_text(encoding="utf-8").splitlines(keepends=True)[:-1]
+    record.write_text("".join(kept), encoding="utf-8")
+
+
+SCORE_ABORT_CASES = [
+    pytest.param(_no_sentinel, "incomplete Run", id="no-run-json"),
+    pytest.param(_truncated_record, "truncated Hypothesis Record", id="truncated-record"),
+]
+
+
+@pytest.mark.parametrize(("break_run", "error_fragment"), SCORE_ABORT_CASES)
+def test_score_aborts_and_names_its_cause(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    break_run: BreakRun,
+    error_fragment: str,
+) -> None:
+    run_dir = tmp_path / "run-20260803T142205Z"
+    shutil.copytree(RUNS / "clean", run_dir)
+    break_run(run_dir)
+
+    exit_code = main(["score", "--run", str(run_dir)])
+
+    assert exit_code != 0
+    captured = capsys.readouterr()
+    assert error_fragment in captured.err
+    # A refusal, not a partial Report: nothing of the header reaches stdout.
+    assert not captured.out
