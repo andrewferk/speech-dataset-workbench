@@ -447,6 +447,14 @@ So **`score` takes no `--config` flag**, and the property becomes symmetric and 
 line: *neither evaluation command has any configuration; every input to an Evaluation is a constant
 this repo owns or a field of the dataset it read.*
 
+> **Amended by ADR-0022 (#136): `score` gains a `--format text|json` flag.** The sentence above
+> survives as written, because it is a claim about what is **measured** — and `--format` changes no
+> Metric, no Scope, and nothing reaching durable identity, exactly as `--split` (already on this
+> command when the sentence was written) does not. ADR-0022 was forced into two renderings by *this*
+> ADR's requirement that per-Sample integer counts be emitted exactly under both tiers, which no
+> human digest can carry; ADR-0021 then made stdout the only surface available. Read "no
+> configuration" as *no input that changes a number*, which is what it meant.
+
 **This does not pre-empt #135.** If evaluation output layout or Run retention needs operator
 configuration, `score` grows a `--config` back carrying a *different* section; `[scoring]` simply
 stays absent. #135 therefore inherits the question of whether `score` has a config file at all.
@@ -480,6 +488,17 @@ So #134 inherits a **constraint rather than a question**, in both directions:
 
 These are the only two strings this ADR sends; a Normalizer's rules are otherwise fixed here as
 constants, so the version tag is the whole of its identity.
+
+> **Amended by ADR-0020 (#134), annotated here by ADR-0022 (#136): a Run has no identity, so there
+> is nothing for these strings to be inputs *to*.** ADR-0020 rejected all three candidate identity
+> schemes and left the Run's directory name as its sole handle; it then moved the Normalizer strings
+> out of `run.json` on its own reasoning — `transcribe` writes that file, Text Normalization happens
+> in `score`, and one Record is *designed* to be scored repeatedly, so the field would describe an
+> event that had not happened yet. The **requirement above survives in substance**: the two strings
+> are named in every Evaluation Report's header (ADR-0022), which is where ADR-0015's *"a Report must
+> state which Normalizer it used"* is discharged, and where the "must not be silently comparable"
+> guarantee actually lands. ADR-0020 did not annotate this paragraph; ADR-0022 does, because it was
+> writing the matching `CONTEXT.md` correction and this text carried the same staleness.
 
 ## Consequences
 

@@ -103,6 +103,13 @@ sdw score      --run <run-dir> [--config <path>]
 > worth reading; the current surface is `sdw score --run <run-dir>` and nothing else. See the
 > amendment below the `[scoring]` paragraph for why every knob predicted for that section came back
 > a constant.
+>
+> **Further amended by ADR-0022 (#136): `sdw score` gains `[--format text|json]`, defaulting to
+> `text`.** The current surface is `sdw score --run <run-dir> [--split <name>] [--format
+> text|json]`. It is a **rendering selector, not configuration** — it changes no Metric, no Scope and
+> nothing reaching durable identity, where `--split` (already on this command) changes every number.
+> ADR-0022 was forced into it by ADR-0018's requirement that per-Sample integer counts be emitted
+> exactly, which a human digest cannot carry.
 
 **`--dataset`, not `--data-in` and not `--data-out`.** The built Dataset Version is evaluation's
 input, but `--data-in` means *the operator's source recordings* throughout ADR-0002 and
