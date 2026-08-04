@@ -523,6 +523,11 @@ constants, so the version tag is the whole of its identity.
 - #138 inherits: validate the golden fixtures **once** against `sclite` and `jiwer` as dev-only
   oracles, then freeze. Our own scorer is the long-term source of truth; the oracles exist to catch a
   first-implementation error, not to be a standing dependency.
+
+  > **Discharged by [ADR-0025](0025-testing-strategy-for-v0-2.md) (#138).** Both obligations above
+  > land there: the golden minimum in this list is inherited whole as the floor of ADR-0025's
+  > fixture inventory, and the oracle check is adopted as written — dev-only, once, in neither
+  > `pyproject.toml` nor any CI job.
 - #136 inherits a computable-but-undecided confidence interval — the per-Sample counts make a
   bootstrap possible with no re-scoring — plus the six-number presentation problem and the labelling
   rule that Macro-average is never "the WER".

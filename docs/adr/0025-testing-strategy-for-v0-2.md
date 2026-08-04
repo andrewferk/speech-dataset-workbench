@@ -62,13 +62,31 @@ self-consistency**, and on a learning project that is the point rather than a ni
 only arrangement in which ADR-0018's arithmetic is checked by something other than ADR-0018's own
 implementation.
 
-**The cases are ADR-0018's degenerate-input table**, which is a specification of exactly which
-fixtures must exist. At minimum: an empty normalized Reference against a non-empty Hypothesis
-(per-Sample `null`, insertions pooled against a zero denominator); empty against empty (`null`, and
-SER *correct*); a non-empty Reference against an empty Hypothesis (`1.0`); a WER above `1.0`,
-unclamped; a `hypothesis: null` failure driving the N-of-M disclosure; a Sample where a Tier A rule
-visibly fires and the Tier B delta is non-zero; and a Scope with zero total Reference tokens, which
-must **refuse to emit**. The last belongs in the abort table below rather than the golden set.
+**ADR-0018 already fixed the floor**, in its Consequences: the golden fixture must cover, at minimum,
+tab / newline / NBSP inputs (the 200% trap), an empty Text-Normalized Reference under Tier B, an
+empty Hypothesis, a WER above `1.0`, a Scope of one Sample, a case with two equal-cost alignments so
+the backtrace tie-break is pinned rather than assumed, and both tiers over the same fixture so the
+delta is pinned too. That list is inherited whole, not restated selectively — it is a floor, and this
+ADR does not get to lower it.
+
+**This ADR adds three cases on top of it**, each falling out of a decision ADR-0018 had not yet made:
+an empty Text-Normalized Reference against a *non-empty* Hypothesis (per-Sample `null`, insertions
+pooled against a zero denominator) and empty against empty (`null`, and SER *correct*) — the two
+halves of ADR-0018's degenerate-input table that its own minimum leaves implicit; and a
+`hypothesis: null` failure driving ADR-0019's N-of-M disclosure, which is a Record-format case rather
+than a metric one.
+
+A Scope with zero total Reference tokens must **refuse to emit**, so it belongs in the abort table
+below rather than the golden set.
+
+**The hand-computed values are validated once against oracles, then frozen.** ADR-0018 addressed this
+to #138 by name: check the goldens against `sclite` and `jiwer` as **dev-only** oracles on first
+authoring, and stop there. Neither becomes a test dependency, neither is installed by any CI job, and
+neither appears in `pyproject.toml` — our own scorer is the long-term source of truth, and the oracles
+exist only to catch a first-implementation error before it is frozen into a golden. A disagreement is
+resolved by hand before the fixture lands, and the resolution is worth a comment in the fixture
+directory, because a disagreement with `sclite` that turned out to be *ours* is exactly the thing a
+later reader will want the reasoning for.
 
 **Costs, accepted.** There is no generator keeping the corner cases coherent, and a schema change
 means hand-editing every fixture. Both are bounded by the fixtures being small and few — and a schema
