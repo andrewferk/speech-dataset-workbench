@@ -78,8 +78,9 @@ directory holding unrelated files is not an error — the tool reads nothing at 
 spirit of ADR-0003's *"files under `--data-in` not referenced by the CSV are silently ignored."*
 
 **The dataset directory is never written to, and there is no default for either path.** Every byte
-either evaluation command emits lands under `--eval-out`, inside a Run directory; `transcribe` opens
-`--dataset` read-only, and `score` (per ADR-0017) never opens it at all. So a Dataset Version is
+either evaluation command writes **to disk** lands under `--eval-out`, inside a Run directory — and
+`transcribe` writes all of them, since `score` writes nothing anywhere and emits its Report to
+stdout. `transcribe` opens `--dataset` read-only, and `score` (per ADR-0017) never opens it at all. So a Dataset Version is
 read by evaluation exactly as `--data-in` is read by `build` — the input side of ADR-0002's
 stateless transform — and the ADR-0010 property that `dataset_version` is recomputable from
 `--data-out` alone survives evaluation untouched, because evaluation adds nothing there to recompute
