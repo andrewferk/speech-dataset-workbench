@@ -13,8 +13,10 @@ Report, Baseline), ADR-0017 (`--eval-out` as a root, incremental Record, provena
 rejection of atomic staging for `transcribe`), ADR-0018 (neither evaluation command has any
 configuration) and ADR-0019 (`hypotheses.jsonl` + `run.json`, and the resumption guarantees).
 
-It **amends nothing**. It annotates `CONTEXT.md`'s **Evaluation Report** entry, whose "emitted
-record" needs to stop reading as a file.
+It **amends ADR-0017** in one place: that ADR calls a Run directory *"self-contained — Record,
+provenance, Report"*, and the Report decision below removes the third member. The amendment is
+written against that sentence where it sits, per this repo's practice. It also annotates
+`CONTEXT.md`'s **Evaluation Report** entry, whose "emitted record" needs to stop reading as a file.
 
 The whole ADR follows from noticing that **ADR-0003's retention rule is not overturned here — it is
 applied.** ADR-0003 says *Originals: always retained, untouched. Derived: always regenerated,
@@ -74,6 +76,16 @@ while looking like a fixed reference. ADR-0017 made the handle explicit for a re
 `transcribe` creates `--eval-out` if it does not exist, parents included. Pointing `--eval-out` at a
 directory holding unrelated files is not an error — the tool reads nothing at that level, in the
 spirit of ADR-0003's *"files under `--data-in` not referenced by the CSV are silently ignored."*
+
+**The dataset directory is never written to, and there is no default for either path.** Every byte
+either evaluation command emits lands under `--eval-out`, inside a Run directory; `transcribe` opens
+`--dataset` read-only, and `score` (per ADR-0017) never opens it at all. So a Dataset Version is
+read by evaluation exactly as `--data-in` is read by `build` — the input side of ADR-0002's
+stateless transform — and the ADR-0010 property that `dataset_version` is recomputable from
+`--data-out` alone survives evaluation untouched, because evaluation adds nothing there to recompute
+over. Neither flag defaults: both are required and explicit, since ADR-0002 makes every path the
+tool touches an operator-named external one, and a defaulted `--eval-out` would put a Run somewhere
+the operator did not name.
 
 ### A Run directory is named `run-<UTC start timestamp>`
 
@@ -259,9 +271,9 @@ their artifact, not `sdw`'s.
 
 No other entry changes, and no term is added. This ADR names no new domain concept — a Run directory
 already *is* the Run (ADR-0015), and `--eval-out` is a flag, not a thing in the domain. That the
-annotation was needed at all is worth noting against ADR-0018's and ADR-0020's *"no `CONTEXT.md`
-change"*: the streak was a signal the vocabulary was right, and one clarifying line is a smaller
-correction than a missing term.
+annotation was needed at all is worth noting against ADR-0020's *"No `CONTEXT.md` change"* — the
+only such section in the v0.2 sequence, since ADR-0018 annotated two entries itself. One clarifying
+line is a smaller correction than a missing term, so the vocabulary is still holding.
 
 ## Consequences
 
