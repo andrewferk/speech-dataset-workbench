@@ -198,6 +198,7 @@ Chosen for a transparent, inspectable, no-ML-at-runtime pipeline:
 | Audio I/O | `soundfile` |
 | Resampling | `python-soxr` (`HQ`) |
 | DSP & rendering | `numpy`, `scipy.signal`, `matplotlib` (Agg) |
+| Text Normalization | ours (Tier A); `openai/whisper`'s English normalizer vendored at `b80bcf6` (Tier B), which brings `regex` and `more-itertools` |
 
 No FFmpeg, no PyAV, no torch, no librosa. Layout is `src/`, with a single `pyproject.toml` and a
 `hatchling` build backend — `uv sync` installs the package, and it runs as `sdw`.
