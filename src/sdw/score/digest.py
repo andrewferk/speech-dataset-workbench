@@ -6,8 +6,7 @@ count changing rather than a line appearing (ADR-0007's `render_digest` rule, wi
 because the goldens diff a captured stream).
 
 The header is five items in a fixed order — Scope, N of M, the Reference, the comparability rule,
-attribution — followed by the Run's Transcription provenance under ADR-0020's tier names, which is
-what stops a `diff` of two Reports rendering clean between two different models (ADR-0024).
+attribution — followed by the Run's Transcription provenance under ADR-0020's tier names (ADR-0024).
 """
 
 from __future__ import annotations
@@ -60,10 +59,8 @@ def _header(report: Report) -> list[str]:
 def _provenance(provenance: Mapping[str, Any]) -> list[str]:
     """The Run's provenance, grouped under ADR-0020's tier names as section headings (ADR-0024).
 
-    The tiers are the reorganisation ADR-0024 chose for the digest — an operator holding two Reports
-    applies the comparability rule by reading down the left column. The *never relevant* tier
-    (`timing`, `record_version`, `record_line_count`) is omitted, `record_line_count` having already
-    been discharged as the header's N-of-M; the JSON rendering carries the file whole.
+    The *never relevant* tier (`timing`, `record_version`, `record_line_count`) is omitted; the JSON
+    rendering carries the file whole.
     """
     dataset = _block(provenance, "dataset")
     sections: Sequence[tuple[str, Sequence[tuple[str, str]]]] = (
