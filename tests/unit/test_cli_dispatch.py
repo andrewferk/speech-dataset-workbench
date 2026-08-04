@@ -1,7 +1,6 @@
 """Dispatch is lazy: `sdw.cli` imports no command module at module level (ADR-0023).
 
-The rule is uniform across every command, so it has no sanctioned exception to erode. It is
-checked from the other side — what `cli.py` imports at module level must stay within the
+Checked from the other side — what `cli.py` imports at module level must stay within the
 non-command modules named below — so a command added eagerly and never lazily, which is the
 erosion itself, fails here rather than going unnoticed.
 """
