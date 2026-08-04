@@ -1,8 +1,4 @@
-"""Levenshtein with backtrace, costs 0/1/1/1, pure Python and no dependencies (ADR-0018).
-
-Ours rather than a library's because every edge case that matters is one we override anyway, and
-because "byte-identical on any machine" is a contract that an integer DP makes trivially true.
-"""
+"""Levenshtein with backtrace, costs 0/1/1/1, pure Python and no dependencies (ADR-0018)."""
 
 from collections.abc import Sequence
 from typing import NamedTuple
@@ -28,8 +24,7 @@ class Alignment(NamedTuple):
     def rate(self) -> float | None:
         """Errors over Reference length, or `None` where the Reference is empty.
 
-        Never clamped and never a sentinel: a rate above 1.0 is the real value, and an undefined
-        one is an absence rather than a `0.0` or an `inf` that would survive aggregation as a lie.
+        Never clamped, and `None` rather than any sentinel number (ADR-0018).
         """
         if self.reference_length == 0:
             return None

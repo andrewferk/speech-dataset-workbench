@@ -1,8 +1,7 @@
 """The per-Sample scorer: WER, CER and SER, under both tiers, from one normalized pair (ADR-0018).
 
-Word-level and character-level counts are emitted separately because CER is its own alignment — per
-Sample, never concatenated — so its errors are not derivable from the word-level ones. Rates are
-derived from those counts and are rounded at serialization, never here.
+Word-level and character-level counts are emitted separately; rates derive from them, and rounding
+belongs to serialization rather than here (ADR-0007).
 """
 
 from collections.abc import Mapping
@@ -48,9 +47,8 @@ def score_sample(reference: str, hypothesis: str) -> Mapping[str, SampleMetrics]
 def _measure(reference: str, hypothesis: str) -> SampleMetrics:
     """All three Metrics off the same normalized pair, so they cannot disagree about the text.
 
-    Takes the Hypothesis a Record holds, and only a `str`: a failed Sample has none and gets no row
-    at all, so widening this to accept its absence would score a crash as an empty Hypothesis —
-    which is the one reading ADR-0018 forbids, since the two would land on the same number.
+    Takes a `str` Hypothesis only: widening it to accept the absent one a failed Sample carries
+    would score a crash as an empty Hypothesis (ADR-0018).
     """
     return SampleMetrics(
         reference=reference,
