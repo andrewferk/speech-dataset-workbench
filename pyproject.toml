@@ -12,6 +12,10 @@ dependencies = [
     "numpy",
     "scipy",
     "matplotlib",
+    # The vendored Tier B normalizer's two imports. Base, not behind the `asr` extra: Scoring runs
+    # in a venv that has no extra installed (ADR-0018, ADR-0023).
+    "regex",
+    "more-itertools",
 ]
 
 # `uv sync` installs the package (editable) into `.venv`, so nothing needs `src/` on the path
@@ -38,6 +42,8 @@ dev = [
 src = ["src", "tests"]
 line-length = 100
 target-version = "py313"
+# Vendored verbatim; see `src/sdw/score/_vendor/README.md` for why it is out of every tool here.
+extend-exclude = ["src/sdw/score/_vendor"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
@@ -50,10 +56,22 @@ known-first-party = ["sdw", "tests", "examples"]
 python_version = "3.13"
 strict = true
 files = ["src", "tests", "examples"]
+# `exclude` keeps the vendored tree off the file list; the `follow_imports` override below stops
+# importing it from checked code dragging it back in.
+exclude = ["^src/sdw/score/_vendor/"]
 
 [[tool.mypy.overrides]]
 module = ["soundfile.*", "soxr.*", "scipy.*", "matplotlib.*"]
 ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["sdw.score._vendor.*"]
+follow_imports = "skip"
+ignore_errors = true
+
+[tool.coverage.run]
+# Uncovered branches in the vendored tree are upstream's shape, not a gap in our tests.
+omit = ["src/sdw/score/_vendor/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
