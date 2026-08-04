@@ -270,6 +270,14 @@ integer counts, normalized text and alignment under both tiers). Two renderings,
 Scope, same numbers, same disclosures. A Report carries no Quality flag — that correlation is a join
 on `id` against `reports/quality.jsonl` — and no confidence interval; and `sdw` never calls a Report
 a **Baseline**, which is a reading an operator applies to it.
+_Note_: **ADR-0024** fills in what "the provenance attributing them" includes. A Report quotes the
+**Transcription provenance** of the Run it scores — `run.json` verbatim in the JSON rendering, and in
+the digest as a block whose headings are ADR-0020's comparability tiers. So a Report states its
+Scope, its Normalizers **and** its conditions, which makes it sufficient to apply ADR-0020's
+comparability rule against another Report: comparing two Runs is `diff` of two Reports for the
+conditions and a `jq` join on `id` for the paired per-Sample deltas. Only the rule's *escalation* for
+an unequal `dataset_version` still needs the two Hypothesis Records. A Report quotes facts the Run
+recorded; it never observes one of its own, so both renderings stay byte-identical across machines.
 
 **Breakdown**:
 A Metric computed over a group of Samples sharing an attribute value — one Session, one Prompt, one

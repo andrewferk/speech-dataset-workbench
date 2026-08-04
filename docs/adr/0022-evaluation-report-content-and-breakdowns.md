@@ -134,6 +134,21 @@ make a bootstrap computable with no re-scoring, so cost is not the argument. The
   JSON rendering, under both tiers, without re-scoring. Declining to print a CI is not declining to
   make one computable; ADR-0018 already guaranteed that.
 
+> **Amended by ADR-0024 (#149): "paired on an identical corpus" overclaims for the cross-run case —
+> the decision is unaffected, the reasoning is corrected.** #128's *"pure, paired, and carries no
+> sampling error at all"* is about two scorings of the **same** Hypotheses: Tier A against Tier B,
+> where the Hypotheses are byte-identical and only the Normalizer moved, so ADR-0018 can emit that
+> delta as exact. A **cross-run** delta is paired by Sample — same `id`s, same References, so
+> corpus-composition variance genuinely cancels — but it is **not exact**: the Hypotheses differ, and
+> they differ from the model change *and* from the same model's run-to-run non-determinism, which
+> ADR-0015 (attributed, not reproducible), #127 (no runtime documents reproducibility at all) and
+> ADR-0020's own opening line all decline to claim away. **That floor is unmeasured**, so a v0.3 delta
+> beneath it would mean nothing while looking like a result. Both arguments above survive intact and
+> ADR-0024 strengthens them: the honest quantity is not a bootstrap on either absolute number but an
+> **empirical floor the operator measures** by transcribing twice under identical provenance — which
+> carries none of the three arbitrary constants the third bullet objects to. **Read the "paired"
+> sentence below against this note**: the fixed words the header states are *paired but not exact*.
+
 **What replaces it is prose, in ADR-0004's register: surface it plainly, no thresholds, no knobs.**
 The header block states, in fixed words, that the absolute number is imprecise on a corpus this size
 and that the comparison it exists for is paired against a Run over the same Samples. That sentence is
@@ -204,6 +219,19 @@ value.
 5. **Attribution** — both Normalizer identity strings (`sdw-tier-a/1`, `whisper-english/b80bcf6`) and
    the **scoring** `tool_version`, which ADR-0020 established is a third occurrence and *routinely*
    differs from the built and transcribed ones.
+
+> **Amended by ADR-0024 (#149): the header also carries the Run's Transcription provenance, and
+> item 4 shrinks.** This block was written for a *single* Report and omits every tier-1 fact of
+> ADR-0020's comparability rule — `model`, `decode`, `language.value` — and its whole
+> *may-differ-must-be-disclosed* tier: `runtime`, `host`, the transcribing `tool_version`. The
+> consequence is that `diff` of two Reports, the comparison ADR-0021 endorsed and this ADR's
+> fixed-shape rule optimises for, renders clean and byte-stable between a `whisper-tiny` Run and a
+> `whisper-large-v3-turbo` Run while **naming neither model** — silent on the one condition that
+> makes the comparison illegitimate, in a header that prints the rule as prose at item 4. ADR-0024
+> adds the provenance: `run.json` **verbatim** under one key in the JSON rendering, and in the digest
+> as a block whose section headings are ADR-0020's tier names, with the facts beneath them. Item 4
+> keeps Scope equality, the `train`/`test` honesty rule and the paired sentence — the tier labels
+> having absorbed the rest. Items 1, 2, 3 and 5 are unchanged and stay unconditionally present.
 
 **Then the numbers**: the Tier A headline; the six-number table (WER/CER/SER × Tier A/Tier B); the
 Tier B − Tier A delta, named a **delta**, never a "deviation" (ADR-0018).
@@ -303,6 +331,16 @@ Two clarifications, because the naive reading of "no wall-clock" is wrong in bot
   anywhere* — and ADR-0020 already settled that the byte-diff exclusion is scoped to files that must
   diff clean, which `run.json` never was. The header's attribution block may therefore quote the
   Run's timing; it may not report its own.
+
+> **Amended by ADR-0024 (#149): "no host fact" means the *scoring* machine's host facts.** ADR-0024
+> echoes `run.json` into the Report, which puts `host.platform_machine`, `host.platform_system` and
+> `runtime.torch_num_threads` into both renderings — read literally, a head-on contradiction of the
+> sentence above. It is the identical case the second bullet already resolves for timestamps: these
+> are **data read from the Record's provenance**, fixed at the end of Transcription, so a Report over
+> the same Run reproduces them byte-identically on any machine, forever. **Determinism is untouched
+> and #138's goldens stay well-defined.** The rule, stated once and generally: *the Report may quote
+> any fact the Run recorded; it may not observe a fact of its own.* That is the distinction this
+> section already draws for timing, applied to the rest of the file.
 
 ### `CONTEXT.md`: two entries annotated, no term added
 
