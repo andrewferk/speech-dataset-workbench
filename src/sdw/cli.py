@@ -49,8 +49,8 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
-        # No command module at module level — an eager import here costs every branch's
-        # `--help` its load, not just this one (ADR-0023).
+        # Hoisting this import costs every branch's `--help` its load, not just this one
+        # (ADR-0023).
         if args.command == "build":
             from sdw import pipeline
 
