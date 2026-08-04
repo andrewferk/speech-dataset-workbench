@@ -9,8 +9,8 @@ about *audio*, where the alternative to a generator is an opaque binary; JSONL i
 the generator's advantage does not carry and its disadvantage does — a generated fixture computes
 its own expected values, and a golden then proves only that the code agrees with itself.
 
-The text is synthetic and contains no speaker-derived utterance, which is what makes committing a
-Record legitimate: `tests/fixtures/` is one of the two entries in the privacy allowlist that
+The text is synthetic and no part of it derives from a real speaker, which is what makes committing
+a Record legitimate: `tests/fixtures/` is one of the two entries in the privacy allowlist that
 ADR-0026 extended to cover tracked `hypotheses.jsonl` (see `tests/unit/test_privacy_allowlist.py`).
 
 | Case | What it is for |
