@@ -1,6 +1,6 @@
 """Argument parsing for the `sdw` command.
 
-Two commands, and the mapping from an outcome to an exit code:
+Three commands, and the mapping from an outcome to an exit code:
 
 - success → 0
 - a hard error → 1 (aborted; no durable output)
@@ -43,6 +43,20 @@ def _parser() -> argparse.ArgumentParser:
         help="Preflight --data-in and print the quality digest. Writes nothing.",
     )
 
+    # No `--config` and no Scope flag, not even an empty one for symmetry with `build`: zero knobs
+    # is what makes a Hypothesis attributable, and an empty config section invites one (ADR-0017).
+    # Neither path defaults — both are operator-named external paths (ADR-0002, ADR-0021).
+    transcribe = subcommands.add_parser(
+        "transcribe",
+        help="Transcribe a built Dataset Version into a new Run under --eval-out.",
+    )
+    transcribe.add_argument(
+        "--dataset", type=Path, required=True, help="Built Dataset Version, read-only."
+    )
+    transcribe.add_argument(
+        "--eval-out", type=Path, required=True, help="Root that holds Runs; one is minted per call."
+    )
+
     return parser
 
 
@@ -55,6 +69,10 @@ def main(argv: list[str] | None = None) -> int:
             from sdw import pipeline
 
             pipeline.build(data_in=args.data_in, data_out=args.data_out, config=args.config)
+        elif args.command == "transcribe":
+            from sdw.transcribe import pipeline as transcribe_pipeline
+
+            transcribe_pipeline.transcribe(dataset=args.dataset, eval_out=args.eval_out)
         else:
             from sdw import pipeline
 

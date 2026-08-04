@@ -89,7 +89,11 @@ def test_the_parser_is_built_without_importing_a_command_module(module: str) -> 
     assert module not in _modules_loaded_by("from sdw.cli import _parser; _parser()")
 
 
-@pytest.mark.parametrize("argv", [[], ["build"], ["validate"]], ids=["sdw", "build", "validate"])
+@pytest.mark.parametrize(
+    "argv",
+    [[], ["build"], ["validate"], ["transcribe"]],
+    ids=["sdw", "build", "validate", "transcribe"],
+)
 def test_help_exits_zero(argv: list[str]) -> None:
     with pytest.raises(SystemExit) as exc:
         main([*argv, "--help"])
