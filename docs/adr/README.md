@@ -1,6 +1,6 @@
 # Decision records
 
-Twenty-five architecture decision records — 0001–0014 shaped v0.1, and 0015 onward is v0.2. Each states
+Twenty-six architecture decision records — 0001–0014 shaped v0.1, and 0015 onward is v0.2. Each states
 what was decided and why, and — usually at greater length — what was considered and rejected, so a
 reader who disagrees can find out whether their objection was already answered.
 
