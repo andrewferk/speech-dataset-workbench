@@ -16,6 +16,8 @@ import pytest
 
 from sdw.cli import main
 from sdw.errors import HardError
+from sdw.transcribe import pipeline
+from sdw.transcribe.backend import Backend
 from sdw.transcribe.dataset import DESCRIPTOR_NAME
 from sdw.transcribe.preflight import preflight
 from tests import synth
@@ -159,3 +161,28 @@ class TestReportsEverythingAtOnce:
         (dataset / DESCRIPTOR_NAME).unlink()
         _preflight(dataset, tmp_path)
         assert not (tmp_path / "eval").exists()
+
+
+class TestOrdering:
+    """The preflight finishes before the checkpoint is loaded (ADR-0017's failure policy).
+
+    This is why the seam is a *thunk* rather than a constructed Backend: a Backend parameter would
+    force the caller to load the model to get a value to pass, putting the minutes the preflight
+    exists to save in front of it. The property is only observable from the ordering, so it is
+    asserted here rather than left to the shape of the signature.
+    """
+
+    def test_a_failed_preflight_never_loads_the_backend(
+        self, dataset: Path, tmp_path: Path
+    ) -> None:
+        (dataset / DESCRIPTOR_NAME).unlink()
+        loads = 0
+
+        def load_backend() -> Backend:
+            nonlocal loads
+            loads += 1
+            raise AssertionError("the model was loaded before the preflight finished")
+
+        with pytest.raises(HardError, match="not a Dataset Version"):
+            pipeline.run(dataset=dataset, eval_out=tmp_path / "eval", load_backend=load_backend)
+        assert loads == 0

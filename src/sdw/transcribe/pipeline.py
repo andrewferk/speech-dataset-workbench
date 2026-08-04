@@ -7,6 +7,7 @@ completeness mechanism, and a crashed Run is kept forever — it *is* the model 
 """
 
 import sys
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -21,10 +22,10 @@ from sdw.transcribe.preflight import preflight
 
 
 def transcribe(*, dataset: Path, eval_out: Path) -> None:
-    """The CLI's entry: load the pinned model, then hand it to :func:`run`.
+    """The CLI's entry: hand :func:`run` the thunk that loads the pinned model.
 
-    The backend is constructed *here* and passed in, which is what keeps every other module under
-    `sdw.transcribe` importable with no ASR extra installed (ADR-0023, ADR-0025). #166 fills this
+    The import of the ASR extra lives inside that thunk, which is what keeps every other module
+    under `sdw.transcribe` importable with no extra installed (ADR-0023, ADR-0025). #166 fills this
     in; until it does the command parses and refuses, rather than inventing a Hypothesis.
     """
     raise HardError(
@@ -33,16 +34,19 @@ def transcribe(*, dataset: Path, eval_out: Path) -> None:
     )
 
 
-def run(*, dataset: Path, eval_out: Path, backend: Backend) -> Path:
+def run(*, dataset: Path, eval_out: Path, load_backend: Callable[[], Backend]) -> Path:
     """Transcribe the entire Dataset Version into one new Run directory, and return its path.
 
     The whole Dataset Version, always: narrowing at Transcription is lossy where narrowing at
-    Scoring is free, so the expensive stage never makes that choice (ADR-0017). `backend` is the
-    test seam — a parameter on an internal function, unreachable from the CLI (ADR-0025).
+    Scoring is free, so the expensive stage never makes that choice (ADR-0017). `load_backend` is
+    the test seam — a parameter on an internal function, unreachable from the CLI (ADR-0025).
     """
     started = datetime.now(UTC)
     run_dir = eval_out / provenance.run_directory_name(started)
     version = preflight(root=dataset, run_dir=run_dir)
+    # A thunk, not a Backend: the preflight has to finish before the checkpoint is loaded, or a
+    # dataset knowably broken in seconds costs the operator the model load first (ADR-0017).
+    backend = load_backend()
     language = resolve_language(version.descriptor.lang)
 
     run_dir.mkdir(parents=True)

@@ -107,7 +107,9 @@ def transcribed(tmp_path: Path) -> tuple[Path, FakeBackend, Path]:
     """One completed Run: the Run directory, the fake that produced it, and the dataset."""
     dataset = _built(tmp_path)
     backend = FakeBackend()
-    run_dir = pipeline.run(dataset=dataset, eval_out=tmp_path / "eval", backend=backend)
+    run_dir = pipeline.run(
+        dataset=dataset, eval_out=tmp_path / "eval", load_backend=lambda: backend
+    )
     return run_dir, backend, dataset
 
 
@@ -279,13 +281,15 @@ class TestRunDirectory:
         self, tmp_path: Path, capsys: pytest.CaptureFixture[str]
     ) -> None:
         dataset = _built(tmp_path)
-        run_dir = pipeline.run(dataset=dataset, eval_out=tmp_path / "eval", backend=FakeBackend())
+        run_dir = pipeline.run(
+            dataset=dataset, eval_out=tmp_path / "eval", load_backend=FakeBackend
+        )
         assert capsys.readouterr().out.strip().splitlines()[-1] == str(run_dir)
 
     def test_nothing_is_written_into_the_dataset_directory(self, tmp_path: Path) -> None:
         dataset = _built(tmp_path)
         before = _tree_bytes(dataset)
-        pipeline.run(dataset=dataset, eval_out=tmp_path / "eval", backend=FakeBackend())
+        pipeline.run(dataset=dataset, eval_out=tmp_path / "eval", load_backend=FakeBackend)
         assert _tree_bytes(dataset) == before
 
 
@@ -313,7 +317,9 @@ class TestLongForm:
         assert main(["build", "--data-in", str(data_in), "--data-out", str(dataset)]) == 0
         capsys.readouterr()
 
-        run_dir = pipeline.run(dataset=dataset, eval_out=tmp_path / "eval", backend=FakeBackend())
+        run_dir = pipeline.run(
+            dataset=dataset, eval_out=tmp_path / "eval", load_backend=FakeBackend
+        )
 
         assert json.loads(_record_lines(run_dir)[0])["long_form"] is True
         assert "long-form" in capsys.readouterr().err
@@ -326,7 +332,7 @@ class TestCrash:
         dataset = _built(tmp_path)
         eval_out = tmp_path / "eval"
         with pytest.raises(KeyboardInterrupt):
-            pipeline.run(dataset=dataset, eval_out=eval_out, backend=_Interrupted())
+            pipeline.run(dataset=dataset, eval_out=eval_out, load_backend=_Interrupted)
         (run_dir,) = list(eval_out.iterdir())
         assert not (run_dir / provenance.RUN_DESCRIPTOR_NAME).exists()
         lines = _record_lines(run_dir)
