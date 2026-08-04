@@ -13,9 +13,13 @@ the one that cannot drift from the code. This doc describes only what holds *bet
 nothing retained between runs — no managed workbench directory, no registry, no database
 ([ADR-0002](adr/0002-stateless-data-in-data-out.md)). A Dataset is exactly the contents of one
 `--data-in`; rebuilding after an edit produces a new Dataset Version rather than mutating an old
-one. There are two commands: `build` reads `--data-in` and replaces `--data-out` wholesale,
+one. There are three commands: `build` reads `--data-in` and replaces `--data-out` wholesale,
 `validate` reads `--data-in` and writes nothing, anywhere, and both accept an optional `--config`
-TOML. That is the entire surface — everything else is a consequence of the seam below. The
+TOML; `score` reads one Run directory, prints an Evaluation Report and writes nothing, anywhere,
+and takes no `--config` and no dataset argument at all
+([ADR-0017](adr/0017-evaluation-command-surface.md),
+[ADR-0021](adr/0021-evaluation-output-layout-and-run-retention.md)).
+That is the entire surface — everything else is a consequence of the seam below. The
 vocabulary throughout — Recording, Sample, Split, Dataset Version, Quality flag — is defined in
 [`CONTEXT.md`](../CONTEXT.md), and this doc uses it as defined.
 
@@ -116,6 +120,22 @@ One line per module. Mechanism is in the docstring; the choices behind it are in
 | `commit.py` | The only writer of `--data-out`, and when a tree becomes a Dataset ([ADR-0003](adr/0003-storage-layout-naming-retention.md)). |
 | `errors.py` | `HardError` — the abort, as distinct from a Quality flag ([ADR-0003](adr/0003-storage-layout-naming-retention.md), [ADR-0007](adr/0007-audio-validation-quality-checks.md)). |
 | `__init__.py` | `__version__`, the single declaration, and one of `dataset_version`'s inputs ([ADR-0010](adr/0010-dataset-version-and-provenance.md)). |
+
+`sdw/score/` is the evaluation path, which imports nothing from `sdw.manifest` or `sdw.provenance`
+at any depth: it parses the emitted JSONL as a stranger would, so an under-specified format is
+caught by the code reading it rather than papered over by a shared constant. `sdw.serialization` is
+the one permitted crossing, because two spellings of the same JSON is the drift that would replace
+([ADR-0023](adr/0023-packaging-optional-dependencies-and-the-import-boundary.md),
+[ADR-0019](adr/0019-hypothesis-record-format.md)).
+
+| Module | Concern |
+| --- | --- |
+| `score/command.py` | The `score` body: read a Run, print one rendering of the Report ([ADR-0021](adr/0021-evaluation-output-layout-and-run-retention.md)). |
+| `score/run.py` | Reads a Run directory, and the two integrity refusals over it ([ADR-0019](adr/0019-hypothesis-record-format.md), [ADR-0020](adr/0020-evaluation-run-provenance-record.md)). |
+| `score/report.py` | The Evaluation Scope, the counts and the disclosures both renderings share ([ADR-0017](adr/0017-evaluation-command-surface.md), [ADR-0022](adr/0022-evaluation-report-content-and-breakdowns.md)). |
+| `score/digest.py` | The operator's text rendering, of invariant shape ([ADR-0022](adr/0022-evaluation-report-content-and-breakdowns.md), [ADR-0024](adr/0024-cross-run-comparison-surface.md)). |
+| `score/document.py` | The machine rendering: one JSON document, echoing `run.json` whole ([ADR-0024](adr/0024-cross-run-comparison-surface.md)). |
+| `score/text_normalization.py` | The two Normalizer tiers and their identity strings ([ADR-0018](adr/0018-text-normalization-and-metric-semantics.md)). |
 
 ## What this doc does not cover
 
