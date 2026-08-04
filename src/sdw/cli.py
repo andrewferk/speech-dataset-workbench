@@ -11,7 +11,6 @@ import argparse
 import sys
 from pathlib import Path
 
-from sdw import pipeline
 from sdw.errors import HardError
 
 
@@ -50,9 +49,16 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        # Every branch imports its own command module here, never at module level, so `--help`
+        # costs no command module's import (ADR-0023). A branch that imports eagerly instead
+        # breaks that for all of them.
         if args.command == "build":
+            from sdw import pipeline
+
             pipeline.build(data_in=args.data_in, data_out=args.data_out, config=args.config)
         else:
+            from sdw import pipeline
+
             pipeline.validate(data_in=args.data_in, config=args.config)
     except HardError as error:
         print(f"error: {error}", file=sys.stderr)
