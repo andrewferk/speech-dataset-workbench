@@ -54,7 +54,7 @@ def _header(report: Report) -> list[str]:
             f"Normalizers {tier_a} and {tier_b}{_SEPARATOR}scored by sdw {report.tool_version}",
         ),
     ]
-    return _wrapped(items)
+    return _wrapped(items, indent="", label_width=max(len(label) for label, _ in items))
 
 
 def _provenance(provenance: Mapping[str, Any]) -> list[str]:
@@ -71,7 +71,7 @@ def _provenance(provenance: Mapping[str, Any]) -> list[str]:
             "Transcription conditions — must match to compare",
             (
                 ("model", _model(_block(provenance, "model"))),
-                ("decode", _fields(_block(provenance, "decode"))),
+                ("decode", _pairs(_block(provenance, "decode"))),
                 ("language", _language(_block(provenance, "language"))),
             ),
         ),
@@ -85,8 +85,8 @@ def _provenance(provenance: Mapping[str, Any]) -> list[str]:
         (
             "Disclosed — may differ; the same question under different arithmetic",
             (
-                ("runtime", _fields(_block(provenance, "runtime"))),
-                ("host", _fields(_block(provenance, "host"))),
+                ("runtime", _pairs(_block(provenance, "runtime"))),
+                ("host", _pairs(_block(provenance, "host"))),
                 # `run.json`'s top-level `tool_version` names the tool that wrote that file, which
                 # is the one that transcribed — not the scoring one in the header (ADR-0020).
                 ("tool", f"transcribed {_get(provenance, 'tool_version')}"),
@@ -97,15 +97,12 @@ def _provenance(provenance: Mapping[str, Any]) -> list[str]:
     lines: list[str] = []
     for heading, rows in sections:
         lines.append(heading)
-        lines += _wrapped(rows, indent="  ", width=width)
+        lines += _wrapped(rows, indent="  ", label_width=width)
     return lines
 
 
-def _wrapped(
-    items: Sequence[tuple[str, str]], *, indent: str = "", width: int | None = None
-) -> list[str]:
+def _wrapped(items: Sequence[tuple[str, str]], *, indent: str, label_width: int) -> list[str]:
     """Label-and-value rows, wrapped to :data:`WIDTH` with the value column kept flush."""
-    label_width = width if width is not None else max(len(label) for label, _ in items)
     lines: list[str] = []
     for label, value in items:
         prefix = f"{indent}{label:<{label_width}}  "
@@ -141,11 +138,11 @@ def _language(block: Mapping[str, Any]) -> str:
     return f"{_get(block, 'value')} ({_get(block, 'source')})"
 
 
-def _fields(block: Mapping[str, Any]) -> str:
+def _pairs(block: Mapping[str, Any]) -> str:
     """``k=v · k=v`` over a block, in file order.
 
-    The keys are kept — ADR-0024's example compacts them into prose, and a compaction is where an
-    interpretation creeps in: a decode constant that moved would be reworded rather than shown.
+    The keys are kept rather than compacted into prose as ADR-0024's example does: a decode
+    constant that moved would then be reworded rather than shown.
     """
     if not block:
         return ABSENT

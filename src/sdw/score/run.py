@@ -119,11 +119,10 @@ def _read_record(path: Path) -> tuple[Sample, ...]:
 def _check_line_count(
     record: tuple[Sample, ...], provenance: Mapping[str, Any], path: Path
 ) -> None:
-    """The only integrity check that exists (ADR-0019/ADR-0020).
+    """The only integrity check that exists. Raises if the file disagrees with its own count.
 
-    A Record truncated *after* the Run finished — a full disk, a partial copy, an editor — is
-    otherwise indistinguishable from a shorter corpus, and the outcome is the one thing ADR-0017's
-    N-of-M disclosure exists to prevent: a Report that silently scores a subset.
+    A Record truncated after the Run finished is otherwise indistinguishable from a shorter corpus
+    (ADR-0019/ADR-0020).
     """
     expected = provenance.get("record_line_count")
     if not isinstance(expected, int) or isinstance(expected, bool):
@@ -142,46 +141,58 @@ def _sample(line: str, path: Path, number: int) -> Sample:
         raise HardError(f"cannot parse {path} line {number}: {error}") from error
     if not isinstance(fields, dict):
         raise HardError(f"cannot parse {path} line {number}: expected a JSON object")
-    where = f"{path} line {number}"
+    read = _Line(fields, f"{path} line {number}")
     return Sample(
-        id=_text(fields, "id", where),
-        reference=_text(fields, "reference", where),
-        hypothesis=_optional_text(fields, "hypothesis", where),
-        error=_optional_text(fields, "error", where),
-        split=_text(fields, "split", where),
-        session_id=_text(fields, "session_id", where),
-        speaker_id=_text(fields, "speaker_id", where),
-        prompt_id=_text(fields, "prompt_id", where),
-        device=_text(fields, "device", where),
-        environment=_text(fields, "environment", where),
-        duration=_number(fields, "duration", where),
-        long_form=_flag(fields, "long_form", where),
+        id=read.text("id"),
+        reference=read.text("reference"),
+        hypothesis=read.optional_text("hypothesis"),
+        error=read.optional_text("error"),
+        split=read.text("split"),
+        session_id=read.text("session_id"),
+        speaker_id=read.text("speaker_id"),
+        prompt_id=read.text("prompt_id"),
+        device=read.text("device"),
+        environment=read.text("environment"),
+        duration=read.number("duration"),
+        long_form=read.flag("long_form"),
     )
 
 
-def _text(fields: Mapping[str, Any], key: str, where: str) -> str:
-    value = fields.get(key)
-    if not isinstance(value, str):
-        raise HardError(f"cannot parse {where}: {key} is missing or not a string")
-    return value
+@dataclass(frozen=True)
+class _Line:
+    """One Record line's fields, read by name against ADR-0019's frozen schema.
 
+    Every reader refuses a missing key as well as a wrong type: the schema is fixed, so a line
+    missing `error` is malformed rather than error-free.
+    """
 
-def _optional_text(fields: Mapping[str, Any], key: str, where: str) -> str | None:
-    value = fields.get(key, _MISSING)
-    if value is None or isinstance(value, str):
+    fields: Mapping[str, Any]
+    where: str
+
+    def text(self, key: str) -> str:
+        value = self.fields.get(key)
+        if not isinstance(value, str):
+            raise self._refuse(key, "a string")
         return value
-    raise HardError(f"cannot parse {where}: {key} is missing or not a string or null")
 
+    def optional_text(self, key: str) -> str | None:
+        value = self.fields.get(key, _MISSING)
+        if value is None or isinstance(value, str):
+            return value
+        raise self._refuse(key, "a string or null")
 
-def _number(fields: Mapping[str, Any], key: str, where: str) -> float:
-    value = fields.get(key)
-    if isinstance(value, bool) or not isinstance(value, int | float):
-        raise HardError(f"cannot parse {where}: {key} is missing or not a number")
-    return float(value)
+    def number(self, key: str) -> float:
+        value = self.fields.get(key)
+        # `bool` is an `int` in Python and is not a duration.
+        if isinstance(value, bool) or not isinstance(value, int | float):
+            raise self._refuse(key, "a number")
+        return float(value)
 
+    def flag(self, key: str) -> bool:
+        value = self.fields.get(key)
+        if not isinstance(value, bool):
+            raise self._refuse(key, "a boolean")
+        return value
 
-def _flag(fields: Mapping[str, Any], key: str, where: str) -> bool:
-    value = fields.get(key)
-    if not isinstance(value, bool):
-        raise HardError(f"cannot parse {where}: {key} is missing or not a boolean")
-    return value
+    def _refuse(self, key: str, expected: str) -> HardError:
+        return HardError(f"cannot parse {self.where}: {key} is missing or not {expected}")

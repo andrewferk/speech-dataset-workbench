@@ -84,11 +84,18 @@ def _is_package(module: str) -> bool:
     return (PACKAGE_ROOT / Path(*module.split(".")[1:]) / "__init__.py").is_file()
 
 
-def _edges() -> set[Edge]:
-    """Every intra-`sdw` import in the source tree, tagged by node depth."""
+def _parse() -> tuple[set[Edge], set[str]]:
+    """Every intra-`sdw` import in the source tree, tagged by node depth, and every module parsed.
+
+    The two are returned together because they must come from one walk: a module set derived from
+    the *edges* would omit every module that imports nothing, so "parses every module" would be a
+    claim about the graph rather than about the tree (ADR-0023).
+    """
     edges: set[Edge] = set()
+    modules: set[str] = set()
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
         module = _module_name(path)
+        modules.add(module)
         tree = ast.parse(path.read_text(encoding="utf-8"))
         in_function = {
             node
@@ -99,11 +106,10 @@ def _edges() -> set[Edge]:
         for node in ast.walk(tree):
             nested = node in in_function
             edges |= {Edge(module, imported, nested) for imported in _imports(node, module)}
-    return edges
+    return edges, modules
 
 
-EDGES = _edges()
-MODULES = frozenset(edge.importer for edge in EDGES)
+EDGES, MODULES = _parse()
 
 
 def _under(module: str, prefix: str) -> bool:
@@ -137,9 +143,19 @@ def _report(path: list[Edge]) -> str:
     return " → ".join([path[0].importer, *(str(edge) for edge in path)])
 
 
-def test_every_module_is_parsed() -> None:
-    # Guards the three rules below, each of which is vacuous over an empty graph.
-    assert {"sdw.cli", "sdw.pipeline", "sdw.score.run"} <= MODULES
+def test_every_module_under_src_is_parsed() -> None:
+    # Guards the three rules below, each of which is vacuous over a graph missing its nodes. The
+    # vendored tree is parsed too: excluded from ruff and mypy (pyproject.toml), it is still source
+    # under `sdw.score`, and an import out of it would break the boundary like any other.
+    discovered = {
+        ".".join((PACKAGE, *path.relative_to(PACKAGE_ROOT).with_suffix("").parts)).removesuffix(
+            ".__init__"
+        )
+        for path in PACKAGE_ROOT.rglob("*.py")
+    }
+
+    assert discovered == MODULES
+    assert {"sdw.cli", "sdw.errors", "sdw.pipeline", "sdw.score.run"} <= MODULES
 
 
 def test_the_build_path_imports_nothing_from_the_eval_path() -> None:

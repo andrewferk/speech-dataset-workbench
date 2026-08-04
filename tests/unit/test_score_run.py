@@ -84,8 +84,7 @@ def test_a_run_without_the_sentinel_is_an_incomplete_run(tmp_path: Path) -> None
 
 
 def test_a_record_disagreeing_with_its_line_count_is_truncated(tmp_path: Path) -> None:
-    # The only integrity check there is. Without it, a Record truncated *after* the Run finished is
-    # indistinguishable from a shorter corpus, and the Report silently scores a subset (ADR-0019).
+    # The only integrity check there is (ADR-0019).
     truncated = _copy("clean", tmp_path / "truncated")
     record = truncated / run.RECORD_FILENAME
     kept = record.read_text(encoding="utf-8").splitlines(keepends=True)[:-1]

@@ -166,9 +166,7 @@ def _no_sentinel(run_dir: Path) -> None:
 
 
 def _truncated_record(run_dir: Path) -> None:
-    # A Record truncated *after* the Run finished — a full disk, a partial copy, an editor. Without
-    # `record_line_count` it is indistinguishable from a shorter corpus, and the outcome is the one
-    # thing ADR-0017's N-of-M disclosure exists to prevent (ADR-0019).
+    # A Record truncated after the Run finished (ADR-0019).
     record = run_dir / "hypotheses.jsonl"
     kept = record.read_text(encoding="utf-8").splitlines(keepends=True)[:-1]
     record.write_text("".join(kept), encoding="utf-8")

@@ -6,6 +6,7 @@ run, one you generated and did not score costs nothing (ADR-0017).
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
@@ -32,6 +33,23 @@ def test_splits_are_labelled_in_adr_0004s_order_not_the_records() -> None:
     # The order is reimplemented in the eval path rather than imported, which is the whole of
     # ADR-0017's "including SPLIT_ORDER" rule; the Record's own order is by `id` (ADR-0019).
     assert _report("disclosures").splits == ("train", "test")
+
+
+def test_a_split_the_eval_path_does_not_know_is_still_labelled(tmp_path: Path) -> None:
+    # A Sample counted in N-of-M but missing from the Scope label would make "every Split present"
+    # a false claim, which is the one thing the label exists to prevent (ADR-0017).
+    directory = tmp_path / "run"
+    shutil.copytree(RUNS / "clean", directory)
+    record = directory / "hypotheses.jsonl"
+    record.write_text(
+        record.read_text(encoding="utf-8").replace('"split":"val"', '"split":"dev"'),
+        encoding="utf-8",
+    )
+
+    assembled = report.assemble(run.read(directory), split=None)
+
+    assert assembled.splits == ("train", "test", "dev")
+    assert assembled.in_scope == 4
 
 
 def test_split_narrows_the_scope_and_the_label_follows_it() -> None:

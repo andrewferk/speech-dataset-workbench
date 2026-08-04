@@ -67,7 +67,7 @@ def assemble(run: Run, *, split: str | None) -> Report:
     in_scope = [sample for sample in run.record if split is None or sample.split == split]
     failed = [sample for sample in in_scope if sample.failed]
     return Report(
-        splits=tuple(name for name in SPLIT_ORDER if any(s.split == name for s in run.record)),
+        splits=_splits_present(run),
         selected_split=split,
         in_scope=len(in_scope),
         # Failed Samples are excluded from the Metrics and counted in the open, because the Samples
@@ -78,6 +78,18 @@ def assemble(run: Run, *, split: str | None) -> Report:
         provenance=dict(run.provenance),
         tool_version=__version__,
     )
+
+
+def _splits_present(run: Run) -> tuple[str, ...]:
+    """Every Split the Record carries, ADR-0004's three first and anything else after.
+
+    A Split the eval path does not recognise is still **listed**, because the label claims to name
+    every Split present and a Sample counted in N-of-M but missing from the label would make that
+    claim false. The order stays total: the known three in ADR-0004's order, then the rest by name.
+    """
+    present = {sample.split for sample in run.record}
+    known = tuple(name for name in SPLIT_ORDER if name in present)
+    return known + tuple(sorted(present - set(SPLIT_ORDER)))
 
 
 def normalizers() -> tuple[str, str]:
