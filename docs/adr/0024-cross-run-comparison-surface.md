@@ -175,8 +175,9 @@ be a number about nothing. This is an operator instruction, not a test.
 
 v0.2 ships **no additional surface**. Comparing two Runs is:
 
-- **the conditions** — `diff` of two Reports, which after the echo is a complete application of
-  ADR-0020's rule; and
+- **the conditions** — `diff` of two Reports, which after the echo applies every tier check in
+  ADR-0020's rule, sending the operator to the two Records only when `dataset_version` is unequal;
+  and
 - **the paired per-Sample deltas** — a `jq` join on `id` across two `--format json` Reports.
 
 The second half deserves stating because it is why no comparison command is needed. ADR-0022 puts one
@@ -267,8 +268,9 @@ Nothing here changes `run.json`, `hypotheses.jsonl`, `dataset.json`, any Metric,
 
 ## Consequences
 
-- `diff <(sdw score --run A) <(sdw score --run B)` is a **complete** application of ADR-0020's
-  comparability rule. The tool ships a cross-run comparison surface and it is two shell redirections.
+- `diff <(sdw score --run A) <(sdw score --run B)` applies **every tier check** of ADR-0020's
+  comparability rule — the whole rule except its one escalation, which the next bullet states. The
+  tool ships a cross-run comparison surface and it is two shell redirections.
 - A Report that omitted its model could compare two different models and look rigorous doing it. It
   cannot any more, and the fix costs no command, no flag and no number.
 - The Report becomes the sufficient artifact ADR-0020 said `run.json` was not — for applying the rule.
