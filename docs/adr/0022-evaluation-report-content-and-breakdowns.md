@@ -146,8 +146,8 @@ make a bootstrap computable with no re-scoring, so cost is not the argument. The
 > beneath it would mean nothing while looking like a result. Both arguments above survive intact and
 > ADR-0024 strengthens them: the honest quantity is not a bootstrap on either absolute number but an
 > **empirical floor the operator measures** by transcribing twice under identical provenance — which
-> carries none of the three arbitrary constants the third bullet objects to. The prose below is
-> amended to say *paired but not exact*.
+> carries none of the three arbitrary constants the third bullet objects to. **Read the "paired"
+> sentence below against this note**: the fixed words the header states are *paired but not exact*.
 
 **What replaces it is prose, in ADR-0004's register: surface it plainly, no thresholds, no knobs.**
 The header block states, in fixed words, that the absolute number is imprecise on a corpus this size
