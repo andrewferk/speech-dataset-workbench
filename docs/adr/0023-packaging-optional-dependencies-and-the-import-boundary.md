@@ -213,6 +213,19 @@ What the `asr` job runs beyond `mypy --strict` — whether any test exercises a 
 whether weights are ever downloaded in CI — is **#138's**, not this ADR's. This ADR establishes that
 the job exists, that it installs the extra, and that it is the only job that may.
 
+> **Answered by [ADR-0025](0025-testing-strategy-for-v0-2.md) (#138): no decode, no weights, and the
+> `asr` job gains two things.** It runs `mypy --strict` as fixed above, plus a **leaf-module import
+> smoke** (`mypy` proves the types line up; it does not prove the import resolves, and the
+> `transformers` override below is exactly what blinds it to a wrong `from transformers import X`),
+> plus the **full `pytest` suite** — because the extra-installed venv is the configuration the
+> operator's own machine is permanently in, and no other job runs the tests there. **`check` also
+> gains `pytest` content that matters to this ADR**: ADR-0025's Scoring goldens and its fake-backend
+> transcribe tests. That is what finally gives **rule 2** teeth — it holds because a job with no
+> extra installed runs the Scoring path, and until #138 there was nothing there to run. Running
+> `pytest` in `asr` too does **not** weaken it: the guarantee comes from `check` running those tests
+> *without* the extra, and the `asr` run is purely additive. The prohibition above is therefore
+> stronger than when it was written, not weaker.
+
 ### torch comes from the CPU index under a Linux marker, and `pip` divergence is accepted
 
 ```toml
