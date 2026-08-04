@@ -124,6 +124,12 @@ downstream scorer is trusted to repair ragged whitespace.
 extra, and ADR-0017 forbids the Scoring path importing anything from the ASR stack — a boundary #137
 is making an executable check. So the choice is **vendor or write**, and the split contract made it.
 
+> **Amended by ADR-0023 (#137): the extra is named `asr`, not `eval`.** Wherever this ADR says
+> *"the eval extra"* — above, and again under *Consequences* — read **the `asr` extra**. #137 settled
+> the name after this ADR was written; the argument is unaffected, and ADR-0023 keeps `transformers`
+> behind that extra with `sdw.score` in a subpackage that the import-graph test forbids from reaching
+> it.
+
 We vendor `whisper/normalizers/english.py` and `basic.py` at commit **`b80bcf6`**, with
 `english.json`, **unmodified**.
 

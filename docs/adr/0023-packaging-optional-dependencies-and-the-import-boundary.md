@@ -361,6 +361,14 @@ what it would be deleting. ADR-0014's *"the install itself needs no check: `uv r
 `sdw`"* now describes one of two venvs, and the `asr` venv has no equivalent backstop — the
 `mypy --strict` run is what proves that install worked.
 
+**ADR-0017 and ADR-0018** are amended in place on one word. Both say *"the eval extra"* — ADR-0017
+where it makes `sdw score` in an extra-less venv the executable form of the boundary, ADR-0018 where
+`transformers` being behind that extra is what forces Tier B to be vendored rather than depended on.
+That phrase was forward-looking shorthand written while this ticket was open; naming the extra `asr`
+retires it, and `sdw[eval]` is now an install token that does not exist. Neither argument changes —
+only the token does — but leaving it would put a wrong command in two ADRs a reader is expected to
+be able to follow top to bottom.
+
 ## Rejected alternatives
 
 - **A PEP 735 dependency group for `asr`** — not an alternative at all once the mechanics are
