@@ -49,10 +49,10 @@ def run(*, dataset: Path, eval_out: Path, backend: Backend) -> Path:
     long_form_count = 0
     with record.RecordWriter(run_dir / record.RECORD_NAME) as writer:
         for sample in version.samples:
-            samples = audio.read(version.audio_path(sample))
-            long_form = audio.is_long_form(samples)
+            waveform = audio.read(version.audio_path(sample))
+            long_form = audio.is_long_form(waveform)
             long_form_count += int(long_form)
-            writer.append(_transcribed(sample, samples, language, backend, long_form=long_form))
+            writer.append(_transcribed(sample, waveform, language, backend, long_form=long_form))
 
     # Last, and only now: the sentinel's presence is what tells `score` the Record is complete.
     (run_dir / provenance.RUN_DESCRIPTOR_NAME).write_text(
@@ -75,7 +75,7 @@ def run(*, dataset: Path, eval_out: Path, backend: Backend) -> Path:
 
 def _transcribed(
     sample: Sample,
-    samples: npt.NDArray[np.float32],
+    waveform: npt.NDArray[np.float32],
     language: Language,
     backend: Backend,
     *,
@@ -83,11 +83,11 @@ def _transcribed(
 ) -> record.Hypothesis:
     """One Sample transcribed, or recorded as failed — a per-Sample failure never aborts the Run.
 
-    The exception's detail goes to stderr and nowhere else: free text in `error` would put absolute
-    paths into a durable artifact whose diffability is a decided property (ADR-0019).
+    The exception's detail reaches stderr and nowhere else: free text in `error` would put absolute
+    paths into a durable artifact (ADR-0017, ADR-0019).
     """
     try:
-        hypothesis = backend.transcribe(samples, language)
+        hypothesis = backend.transcribe(waveform, language)
     except Exception as error:
         print(f"warning: transcription failed for {sample.id}: {error}", file=sys.stderr)
         return record.failed(sample, long_form=long_form)

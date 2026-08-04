@@ -1,14 +1,11 @@
 """`run.json`: the Run's provenance, and the completeness sentinel (ADR-0020).
 
-Deliberately parallel to `dataset.json` — a descriptor beside the data it describes, written
-**last** — but carrying provenance in place of an identifier: **a Run has no id**, because an
-id-shaped string in this file would be read as the *equal implies identical content* contract a
-non-deterministic Run cannot honour. Its handle is its directory name (ADR-0021).
+Written last, and carrying no Run identifier and no hash over the Record: an id-shaped string here
+would assert a guarantee a non-deterministic Run cannot make (ADR-0020). Wall-clock and host facts
+belong in this file and nowhere else — the boundary is the file, so a Record line stays free of
+them (ADR-0019/ADR-0020).
 
-This module shares a name with `sdw.provenance` and imports nothing from it: the stranger-consumer
-rule holds at any depth (ADR-0017), and the two files answer to different regimes — wall-clock and
-host facts belong here and are forbidden on a Record line. The boundary is the file, not a
-compromise (ADR-0020).
+It shares a name with `sdw.provenance` and imports nothing from it (ADR-0017).
 """
 
 import json
@@ -63,17 +60,12 @@ def render(
     record_line_count: int,
     timing: Timing,
 ) -> str:
-    """`run.json`'s bytes: nested blocks, canonical JSON, in ADR-0020's order.
+    """`run.json`'s bytes: canonical JSON, nested blocks, in ADR-0020's order.
 
-    Nesting is chosen for the comparability rule rather than for tidiness — drawn along the lines
-    the rule cares about, the blocks make it *"these must match; those two are a caveat; that one
-    never matters"*, applicable by eye where twenty flat keys are a checklist.
-
-    Top-level `tool_version` names the tool that wrote *this* file, which is the rule that holds in
-    all three artifacts; `dataset.tool_version` is the tool that built the dataset, and neither is
-    assumed equal to the other or to the one that will score it (ADR-0020). The Normalizer identity
-    strings are absent on purpose: Text Normalization happens in `score`, and this file would be
-    describing an event that had not happened when it was written.
+    The blocks are the comparability rule's tiers, so flattening or reordering them breaks a rule
+    stated over their names. Top-level `tool_version` names the tool that wrote *this* file;
+    `dataset.tool_version` names the one that built the dataset, and neither is assumed equal to
+    the other or to the scoring occurrence (ADR-0020).
     """
     return _render(
         {
@@ -98,11 +90,10 @@ def render(
 
 
 def _host() -> dict[str, str]:
-    """The host facts, on the numerics argument rather than the diary one (ADR-0020).
+    """Architecture and OS — the two host facts a future comparison needs (ADR-0020).
 
-    Architecture is the other input to the reduction-order fact `torch_num_threads` is recorded for.
-    No hostname, no username, no absolute paths: no attribution value on a single-operator tool, and
-    the one part of the excluded set that is identity-shaped rather than merely non-deterministic.
+    No hostname, no username, no absolute paths: those are the identity-shaped part of the excluded
+    set, and adding one would put a fact about the operator into a durable artifact.
     """
     return {"platform_machine": platform.machine(), "platform_system": platform.system()}
 

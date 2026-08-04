@@ -89,10 +89,18 @@ def read_descriptor(root: Path) -> Descriptor:
     (`[manifest].lang`) — not off a Manifest line, where the same fact appears per Sample and could
     disagree with itself.
     """
-    document = _read_json(root / DESCRIPTOR_NAME, missing="--dataset is not a Dataset Version")
+    path = root / DESCRIPTOR_NAME
+    if not path.is_file():
+        raise HardError(f"--dataset is not a Dataset Version: no {DESCRIPTOR_NAME} at {root}")
+    try:
+        document = json.loads(path.read_text(encoding=ENCODING))
+    except json.JSONDecodeError as error:
+        raise HardError(f"{DESCRIPTOR_NAME} will not parse: {path} ({error})") from error
     if not isinstance(document, dict):
-        raise HardError(f"{DESCRIPTOR_NAME} is not a JSON object: {root / DESCRIPTOR_NAME}")
-    lang = document.get("config", {}).get("manifest", {}).get("lang")
+        raise HardError(f"{DESCRIPTOR_NAME} is not a JSON object: {path}")
+    # Stepped rather than chained: a `config` block of the wrong shape is a malformed descriptor,
+    # which the preflight must be able to report beside the rest — not an `AttributeError`.
+    lang = _mapping(_mapping(document, "config"), "manifest").get("lang")
     if lang is not None and not isinstance(lang, str):
         raise HardError(f"{DESCRIPTOR_NAME} has a non-string config.manifest.lang: {lang!r}")
     return Descriptor(
@@ -104,25 +112,30 @@ def read_descriptor(root: Path) -> Descriptor:
 
 
 def read_samples(root: Path) -> tuple[Sample, ...]:
-    """Every Sample of every Split, ordered by `id` ascending (ADR-0019).
+    """Every Sample of every Split, ordered by `id` ascending, or raise naming *every* bad Manifest.
 
-    Each Manifest is already `recording_id`-sorted (ADR-0006), but the three are merged into one
-    total order here rather than concatenated in a Split order this package deliberately does not
-    know.
+    The three files are merged into one total order rather than concatenated in a Split order this
+    package deliberately does not know (ADR-0019). All three are attempted before raising: the
+    preflight promises one round of problems, and stopping at the first file would hide two
+    (ADR-0017).
     """
-    samples = [
-        _sample(line, path)
-        for name in MANIFEST_NAMES
-        for path, line in _manifest_lines(root / name)
-    ]
+    samples: list[Sample] = []
+    problems: list[str] = []
+    for name in MANIFEST_NAMES:
+        try:
+            samples.extend(_manifest(root / name))
+        except HardError as error:
+            problems.append(str(error))
+    if problems:
+        raise HardError("\n".join(problems))
     return tuple(sorted(samples, key=lambda sample: sample.id))
 
 
-def _manifest_lines(path: Path) -> list[tuple[Path, dict[str, Any]]]:
-    """Every line of one Manifest as a JSON object, or abort naming the file and line."""
+def _manifest(path: Path) -> list[Sample]:
+    """One Manifest's Samples, or abort naming the file and the line that is wrong."""
     if not path.is_file():
         raise HardError(f"Manifest is missing: {path}")
-    lines = []
+    samples = []
     for number, raw in enumerate(path.read_text(encoding=ENCODING).splitlines(), start=1):
         if not raw.strip():
             continue
@@ -132,8 +145,8 @@ def _manifest_lines(path: Path) -> list[tuple[Path, dict[str, Any]]]:
             raise HardError(f"Manifest will not parse: {path} line {number} ({error})") from error
         if not isinstance(line, dict):
             raise HardError(f"Manifest line is not a JSON object: {path} line {number}")
-        lines.append((path, line))
-    return lines
+        samples.append(_sample(line, path))
+    return samples
 
 
 def _sample(line: dict[str, Any], path: Path) -> Sample:
@@ -162,10 +175,7 @@ def _string(document: dict[str, Any], key: str, source: Path | str) -> str:
     return value
 
 
-def _read_json(path: Path, *, missing: str) -> Any:
-    if not path.is_file():
-        raise HardError(f"{missing}: no {path.name} at {path.parent}")
-    try:
-        return json.loads(path.read_text(encoding=ENCODING))
-    except json.JSONDecodeError as error:
-        raise HardError(f"{path.name} will not parse: {path} ({error})") from error
+def _mapping(document: dict[str, Any], key: str) -> dict[str, Any]:
+    """One nested block of the descriptor; absent or malformed reads as empty."""
+    value = document.get(key)
+    return value if isinstance(value, dict) else {}

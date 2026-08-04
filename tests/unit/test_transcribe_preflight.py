@@ -79,8 +79,10 @@ class TestAborts:
         assert "dataset.json will not parse" in _preflight(dataset, tmp_path)
 
     def test_an_unparseable_manifest(self, dataset: Path, tmp_path: Path) -> None:
-        (dataset / "train.jsonl").write_text('{"id":"rec_a"}\n{oops\n', encoding="utf-8")
-        assert "Manifest will not parse" in _preflight(dataset, tmp_path)
+        (dataset / "train.jsonl").write_text("{oops\n", encoding="utf-8")
+        message = _preflight(dataset, tmp_path)
+        assert "Manifest will not parse" in message
+        assert "line 1" in message
 
     def test_a_manifest_line_missing_a_field(self, dataset: Path, tmp_path: Path) -> None:
         # The stranger-consumer dogfood: a field this package needs and the Manifest stops emitting
@@ -135,6 +137,23 @@ class TestReportsEverythingAtOnce:
         assert "--dataset is not a Dataset Version" in message
         assert "will not decode" in message
         assert "the Run directory already exists" in message
+
+    def test_two_broken_manifests_are_both_named(self, dataset: Path, tmp_path: Path) -> None:
+        # All three Manifests are attempted before raising: stopping at the first would hand the
+        # operator one problem and hide the next, which is first-contact abort wearing a list.
+        (dataset / "train.jsonl").write_text("{oops\n", encoding="utf-8")
+        (dataset / "val.jsonl").unlink()
+        message = _preflight(dataset, tmp_path)
+        assert "Manifest will not parse" in message
+        assert "Manifest is missing" in message
+
+    def test_a_malformed_config_block_is_reported_not_raised(
+        self, dataset: Path, tmp_path: Path
+    ) -> None:
+        # A descriptor whose `config` is the wrong shape is a preflight problem like any other; a
+        # chained lookup would `AttributeError` past the collection instead.
+        (dataset / DESCRIPTOR_NAME).write_text('{"config":[]}', encoding="utf-8")
+        assert "missing or non-string 'dataset_version'" in _preflight(dataset, tmp_path)
 
     def test_nothing_is_created_by_a_failed_preflight(self, dataset: Path, tmp_path: Path) -> None:
         (dataset / DESCRIPTOR_NAME).unlink()

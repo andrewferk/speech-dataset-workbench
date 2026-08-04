@@ -29,11 +29,13 @@ def preflight(*, root: Path, run_dir: Path) -> DatasetVersion:
     try:
         descriptor = dataset.read_descriptor(root)
     except HardError as error:
-        problems.append(str(error))
+        problems.extend(str(error).splitlines())
     try:
         samples = dataset.read_samples(root)
     except HardError as error:
-        problems.append(str(error))
+        # Split, not appended whole: `read_samples` reports all three Manifests at once, and the
+        # message below renders one problem per line.
+        problems.extend(str(error).splitlines())
 
     if samples is not None:
         if not samples:
@@ -41,9 +43,7 @@ def preflight(*, root: Path, run_dir: Path) -> DatasetVersion:
         problems.extend(_undecodable(root, samples))
 
     if run_dir.exists():
-        # A `-2` suffix would produce two directories whose names imply an ordering relationship
-        # they do not have; two Runs in one UTC second means two concurrent invocations of a
-        # multi-minute stage on a single-operator tool (ADR-0021).
+        # A collision is a hard error, never a `-2` suffix or an overwrite (ADR-0021).
         problems.append(f"the Run directory already exists: {run_dir}")
 
     if problems or descriptor is None or samples is None:

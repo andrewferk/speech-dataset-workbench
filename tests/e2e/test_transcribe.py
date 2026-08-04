@@ -77,9 +77,9 @@ class FakeBackend:
     def provenance(self) -> BackendProvenance:
         return BackendProvenance(model=_MODEL, decode=_DECODE, runtime=_RUNTIME)
 
-    def transcribe(self, samples: npt.NDArray[np.float32], language: Language) -> str:
+    def transcribe(self, waveform: npt.NDArray[np.float32], language: Language) -> str:
         outcome = _OUTCOMES[len(self.calls)]
-        self.calls.append((samples.dtype, samples.shape, language))
+        self.calls.append((waveform.dtype, waveform.shape, language))
         if outcome is None:
             raise RuntimeError(f"decode failed reading /private/var/tmp/{len(self.calls)}.wav")
         return outcome
@@ -338,10 +338,10 @@ class TestCrash:
 class _Interrupted(FakeBackend):
     """A backend that dies mid-Run — not an `Exception`, so it is not a per-Sample failure."""
 
-    def transcribe(self, samples: npt.NDArray[np.float32], language: Language) -> str:
+    def transcribe(self, waveform: npt.NDArray[np.float32], language: Language) -> str:
         if self.calls:
             raise KeyboardInterrupt
-        return super().transcribe(samples, language)
+        return super().transcribe(waveform, language)
 
 
 def _record_lines(run_dir: Path) -> list[str]:

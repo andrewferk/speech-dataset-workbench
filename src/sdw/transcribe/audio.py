@@ -1,9 +1,4 @@
-"""Read a Sample's Normalized audio as the array the model is handed (#164, ADR-0016).
-
-The array, never the path: every path-based ASR entry point routes through FFmpeg, and ADR-0005's
-zero-FFmpeg promise is kept structural by there being no path to pass. `float32` because that is
-what every runtime casts to anyway, and `soundfile`'s `float64` default buys nothing here.
-"""
+"""Read a Sample's Normalized audio as the array the model is handed (#164, ADR-0016)."""
 
 from pathlib import Path
 
@@ -13,31 +8,30 @@ import soundfile as sf
 
 from sdw.errors import HardError
 
-# Whisper's short-form path is selected by 3000 encoder frames — 30 s at 16 kHz (ADR-0016). Above
-# it a Sample decodes in the long-form regime, which is disclosed per line and never rejected.
+# Audio frames, not the 3000 encoder frames ADR-0016 states the same threshold in: 30 s at 16 kHz,
+# above which a Sample decodes in Whisper's long-form regime.
 LONG_FORM_FRAMES = 480_000
 
 
 def read(path: Path) -> npt.NDArray[np.float32]:
-    """Decode one Normalized WAV to mono `float32`, or abort naming the file (ADR-0017).
+    """Decode one Normalized WAV to mono `float32`, or raise :class:`HardError` naming the file.
 
-    Called twice per Sample across a Run — once in the preflight, once with the model loaded — so
-    that *"any Sample's audio will not decode"* is knowable in seconds rather than at minute 39.
+    The array is the whole seam: passing a *path* to the model would route through FFmpeg and undo
+    ADR-0005's zero-FFmpeg property (ADR-0016).
     """
     try:
-        samples, _ = sf.read(path, dtype="float32", always_2d=False)
+        waveform, _ = sf.read(path, dtype="float32", always_2d=False)
     except (sf.LibsndfileError, OSError) as error:
         raise HardError(
             f"Normalized audio is missing or will not decode: {path} ({error})"
         ) from error
-    return np.asarray(samples, dtype=np.float32)
+    return np.asarray(waveform, dtype=np.float32)
 
 
-def is_long_form(samples: npt.NDArray[np.float32]) -> bool:
-    """Whether this Sample decodes in the long-form regime (ADR-0016, ADR-0019).
+def is_long_form(waveform: npt.NDArray[np.float32]) -> bool:
+    """Whether this Sample decodes in the long-form regime (ADR-0016).
 
-    Not v0.1's `duration_out_of_range`: that flag fires against a *configurable* threshold and
-    expresses an opinion about dataset quality, where this one fires against Whisper's fixed window
-    and expresses which decode regime produced the Hypothesis.
+    Not v0.1's `duration_out_of_range`: that threshold is configurable and this one is Whisper's,
+    so reusing the flag would assert an identity that does not hold (ADR-0019).
     """
-    return len(samples) > LONG_FORM_FRAMES
+    return len(waveform) > LONG_FORM_FRAMES

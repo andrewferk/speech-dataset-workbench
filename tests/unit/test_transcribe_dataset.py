@@ -69,6 +69,20 @@ class TestDescriptor:
         # Defaulting is the Run's decision and is disclosed there; the reader reports what it read.
         assert dataset.read_descriptor(_write(tmp_path, lines={})).lang is None
 
+    def test_a_descriptor_that_is_not_an_object_aborts(self, tmp_path: Path) -> None:
+        root = _write(tmp_path, lines={})
+        (root / dataset.DESCRIPTOR_NAME).write_text("[]", encoding="utf-8")
+        with pytest.raises(HardError, match="not a JSON object"):
+            dataset.read_descriptor(root)
+
+    def test_a_non_string_lang_aborts(self, tmp_path: Path) -> None:
+        root = _write(tmp_path, lines={})
+        (root / dataset.DESCRIPTOR_NAME).write_text(
+            json.dumps({"config": {"manifest": {"lang": 7}}}), encoding="utf-8"
+        )
+        with pytest.raises(HardError, match="non-string config.manifest.lang"):
+            dataset.read_descriptor(root)
+
     def test_a_missing_version_string_aborts(self, tmp_path: Path) -> None:
         root = _write(tmp_path, lines={})
         (root / dataset.DESCRIPTOR_NAME).write_text('{"tool_version":"0.1.0"}', encoding="utf-8")
@@ -106,6 +120,12 @@ class TestSamples:
         hf.mkdir(parents=True)
         (hf / "metadata.jsonl").write_text("{not json\n", encoding="utf-8")
         assert len(dataset.read_samples(root)) == 1
+
+    def test_a_manifest_line_that_is_not_an_object_aborts(self, tmp_path: Path) -> None:
+        root = _write(tmp_path, lines={})
+        (root / "train.jsonl").write_text('["rec_a"]\n', encoding="utf-8")
+        with pytest.raises(HardError, match="not a JSON object"):
+            dataset.read_samples(root)
 
     def test_a_non_numeric_duration_aborts(self, tmp_path: Path) -> None:
         root = _write(tmp_path, lines={"train": [{**_LINE, "duration": "3.2"}]})

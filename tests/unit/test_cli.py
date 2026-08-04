@@ -225,6 +225,16 @@ class TestTranscribe:
             main([*argv, flag, "whatever"])
         assert exc.value.code != 0
 
+    def test_the_absent_backend_is_a_named_hard_error(
+        self, data_in: Path, eval_out: Path, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        # #166 constructs the model in the dispatch branch; until then the command refuses rather
+        # than inventing a Hypothesis, and writes nothing under `--eval-out` (ADR-0025).
+        argv = ["transcribe", "--dataset", str(data_in), "--eval-out", str(eval_out)]
+        assert main(argv) == 1
+        assert "no ASR backend yet" in capsys.readouterr().err
+        assert not eval_out.exists()
+
 
 class TestUsage:
     def test_no_subcommand_is_a_usage_error(self) -> None:

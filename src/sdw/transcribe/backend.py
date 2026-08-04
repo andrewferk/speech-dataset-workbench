@@ -1,12 +1,11 @@
 """The model seam: what Transcription calls, and what it quotes into `run.json` (ADR-0025).
 
-The seam is a **parameter on an internal function** — :func:`sdw.transcribe.pipeline.run` takes a
-:class:`Backend` — not an argument, not configuration, and not a registry. A seam that took a model
-identifier would be checkpoint selection by the back door, which ADR-0016 refused as a *decision*
-rather than as an ergonomic; widening this is still an ADR change.
+The seam is a **parameter** on :func:`sdw.transcribe.pipeline.run` — never an argument, a config key
+or a registry, any of which would be checkpoint selection by the back door. Widening it is an ADR
+change (ADR-0016, ADR-0025).
 
-Nothing here imports the ASR extra. The one leaf module that does supplies a :class:`Backend`, and
-the tests supply a fake, which is what keeps the whole write path testable in a torch-free venv.
+Nothing here imports the ASR extra: the leaf module that does supplies a :class:`Backend`, and the
+tests supply a fake, which is what keeps the write path testable in a torch-free venv.
 """
 
 from collections.abc import Mapping
@@ -55,7 +54,7 @@ class Backend(Protocol):
     def provenance(self) -> BackendProvenance:
         """The model, decode and runtime facts of this loaded backend."""
 
-    def transcribe(self, samples: npt.NDArray[np.float32], language: Language) -> str:
+    def transcribe(self, waveform: npt.NDArray[np.float32], language: Language) -> str:
         """The Hypothesis for one Sample's Normalized audio, raw and unnormalized.
 
         Raising is a per-Sample failure: it is recorded and the Run continues (ADR-0017).
