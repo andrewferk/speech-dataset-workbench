@@ -261,6 +261,14 @@ surface is `sdw transcribe --dataset <dir> --eval-out <dir>` and `sdw score --ru
 [--split <name>]`, and ADR-0018's symmetry holds exactly as stated: **neither evaluation command has
 any configuration.**
 
+> **Amended by ADR-0022 (#136): `sdw score --run <run-dir> [--split <name>] [--format
+> text|json]`.** The paragraph above holds as reasoning — retention has no policy, the name comes
+> from the clock, the Report is not written — and ADR-0022 adds no *configuration*: `--format`
+> selects a rendering of one Report, changing no number. It is the direct consequence of the
+> sentence three sections above, which pre-authorised it: *"if #136 concludes it needs both a human
+> rendering and a machine-readable one, that is a rendering question about one stream — not a reason
+> to write files."* It concluded exactly that, and no file is written.
+
 ### `CONTEXT.md` gains one annotation
 
 **Evaluation Report** reads *"The emitted record of a Run: its Metrics, its Breakdowns, and the

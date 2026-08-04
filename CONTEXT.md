@@ -246,8 +246,13 @@ a Dataset Version is content-derived, reproducible, and recomputable from output
 none of those.
 _Avoid_: Version, snapshot, release, experiment.
 _Note_: "one Normalizer" is superseded by **ADR-0018**, which computes every Metric under **two**
-always-on Normalizers, `sdw-tier-a/1` and `whisper-english/b80bcf6`. Both are required inputs to a
-Run's identity; what a Run still holds one of is the *set* of Normalizers, fixed and not selectable.
+always-on Normalizers, `sdw-tier-a/1` and `whisper-english/b80bcf6`; what a Run still holds one of is
+the *set* of Normalizers, fixed and not selectable. This entry also said both strings were "required
+inputs to a Run's identity", which went stale twice: **ADR-0020** gives a Run **no identity at all**
+(its handle is its directory name) and moves the Normalizer strings out of `run.json`, since
+`transcribe` writes that file and Text Normalization happens in `score`. Per **ADR-0022** they are
+**Report-side attribution**, named in every Evaluation Report's header — which is where ADR-0015's
+requirement that a Report state which Normalizer it used is discharged.
 
 **Evaluation Report**:
 The emitted record of a Run: its Metrics, its Breakdowns, and the provenance attributing them. An
@@ -258,6 +263,13 @@ _Note_: "emitted record" is **not** a file. Per **ADR-0021**, `sdw score` writes
 Report is emitted to **stdout** and never persisted by the tool, and a Run directory never contains
 one. A Report is cheap and pure where a Hypothesis Record is expensive and irreproducible, so it is
 regenerated rather than retained. An operator's redirected copy is their artifact, not `sdw`'s.
+_Note_: **ADR-0022** gives one Report **two renderings** of that same stream, selected by
+`--format` — a human digest (percentages, fixed header, Breakdown tables, a worklist of Samples that
+erred) and a JSON document (every aggregate and Breakdown group, plus one row per Sample with its
+integer counts, normalized text and alignment under both tiers). Two renderings, one Report: same
+Scope, same numbers, same disclosures. A Report carries no Quality flag — that correlation is a join
+on `id` against `reports/quality.jsonl` — and no confidence interval; and `sdw` never calls a Report
+a **Baseline**, which is a reading an operator applies to it.
 
 **Breakdown**:
 A Metric computed over a group of Samples sharing an attribute value — one Session, one Prompt, one
