@@ -75,8 +75,8 @@ class RecordWriter:
     """
 
     def __init__(self, path: Path) -> None:
-        # Not the atomic staging ADR-0003 uses for `build`: its stale-`.tmp` sweep would delete the
-        # very minutes incremental writing exists to save (ADR-0021).
+        # A plain handle, not `build`'s atomic staging — see :mod:`sdw.transcribe.pipeline`
+        # (ADR-0021).
         self._handle = path.open("w", encoding=ENCODING, newline="\n")
         self.line_count = 0
 

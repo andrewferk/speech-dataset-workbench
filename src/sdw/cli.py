@@ -1,6 +1,6 @@
 """Argument parsing for the `sdw` command.
 
-Two commands, and the mapping from an outcome to an exit code:
+Three commands, and the mapping from an outcome to an exit code:
 
 - success → 0
 - a hard error → 1 (aborted; no durable output)
