@@ -190,6 +190,25 @@ tests/
   be its second consumer without giving up what they are for. The rule is scoped to the `--data-out`
   tree — it says nothing about constants used for *inputs* or test-local scratch paths.
 
+- **Extended to v0.2 by [ADR-0025](0025-testing-strategy-for-v0-2.md) (#138), in four places.** The
+  eval path splits on the reproducibility seam and only one half inherits this ADR.
+
+  - **The single-generator rule is scoped to audio.** "`tests/synth.py` is the sole home for *all*
+    fixture creation" stands for every WAV the suite uses. v0.2's **Run fixtures** —
+    `hypotheses.jsonl` + `run.json` — are **hand-authored**, because the argument for a generator was
+    that binaries cannot be reviewed in a diff, and JSONL can. A generated Record would also compute
+    the expected WER it is meant to check.
+  - **"Golden files are exact" now covers a captured stream.** ADR-0021 never writes the Report to
+    disk, so the Scoring goldens compare captured **stdout**, one per `--format`. The rule is
+    unchanged — exact equality, no tolerances — only the capture is new.
+  - **Build-twice-and-diff does not extend to the eval path.** It exists here for artifacts that
+    *cannot* be goldened (arch-fragile WAVs, matplotlib PNGs); v0.2 emits only goldenable text, and
+    `score` writes no files at all. A golden is strictly stronger, so v0.2 adds no self-diff of any
+    kind.
+  - **CI is three jobs, and `check` may never install the `asr` extra.** The single-suite-single-job
+    picture above is superseded by ADR-0023's split; ADR-0025 fixes what each job runs. Coverage
+    stays measured, not enforced.
+
 ## Rejected alternatives
 
 - **Pure committed WAV corpus (no synth)** — rejected; opaque binaries drift into magic files, can't
