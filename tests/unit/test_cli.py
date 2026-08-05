@@ -11,6 +11,7 @@ from pathlib import Path
 
 import pytest
 
+from sdw import cli
 from sdw.cli import main
 from tests import synth
 
@@ -226,10 +227,17 @@ class TestTranscribe:
         assert exc.value.code != 0
 
     def test_the_absent_backend_is_a_named_hard_error(
-        self, data_in: Path, eval_out: Path, capsys: pytest.CaptureFixture[str]
+        self,
+        data_in: Path,
+        eval_out: Path,
+        capsys: pytest.CaptureFixture[str],
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         # #166 constructs the model in the dispatch branch; until then the command refuses rather
-        # than inventing a Hypothesis, and writes nothing under `--eval-out` (ADR-0025).
+        # than inventing a Hypothesis, and writes nothing under `--eval-out` (ADR-0025). The extra
+        # probe now runs first (ADR-0023) and would answer instead in a venv without it — the probe
+        # itself is `tests/unit/test_asr_extra.py`'s subject.
+        monkeypatch.setattr(cli, "ASR_MODULES", ("sys",))
         argv = ["transcribe", "--dataset", str(data_in), "--eval-out", str(eval_out)]
         assert main(argv) == 1
         assert "no ASR backend yet" in capsys.readouterr().err
