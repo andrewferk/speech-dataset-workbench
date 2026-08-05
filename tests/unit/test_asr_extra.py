@@ -8,6 +8,8 @@ extra and in one without, and a test that only holds in one of them is worse tha
 
 from __future__ import annotations
 
+import importlib.metadata
+import re
 import sys
 
 import pytest
@@ -75,6 +77,16 @@ def test_an_internal_import_error_is_not_reported_as_a_missing_extra(
 
 
 def test_the_probe_names_every_module_the_extra_provides() -> None:
-    # One sentinel would let a half-installed venv crash partway through the import instead
-    # (ADR-0023). The extra is `transformers` and torch; both are probed.
-    assert set(cli.ASR_MODULES) == {"torch", "transformers"}
+    """Held against the declared extra, never restated: a second literal cannot catch drift.
+
+    `find_spec` takes import names and the metadata declares distribution names, so the probe list
+    cannot be derived from the extra — but a distribution added to `asr` and not to the list is the
+    half-installed venv the probe exists to diagnose, silently unprobed (ADR-0010, ADR-0023). Where
+    the two names differ, this fails and the divergence gets written down rather than discovered.
+    """
+    declared = {
+        re.split(r"[\s;<>=!~\[]", requirement, maxsplit=1)[0]
+        for requirement in importlib.metadata.metadata("sdw").get_all("Requires-Dist") or []
+        if re.search(r"""extra\s*==\s*["']asr["']""", requirement)
+    }
+    assert declared == set(cli.ASR_MODULES)

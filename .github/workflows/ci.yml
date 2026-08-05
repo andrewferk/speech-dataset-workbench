@@ -80,6 +80,8 @@ jobs:
       - name: Install the pinned toolchain and the asr extra
         run: uv sync --locked --extra asr
 
+      # `--extra asr` on every step below is load-bearing, not redundant: `uv run` re-syncs the
+      # environment, so a plain one would uninstall the extra this job exists to install.
       - name: mypy --strict
         run: uv run --extra asr mypy --strict
 
@@ -91,8 +93,8 @@ jobs:
         run: |
           uv run --extra asr python -c "
           import importlib, pkgutil, sdw.transcribe
-          for module in pkgutil.iter_modules(sdw.transcribe.__path__):
-              importlib.import_module(f'sdw.transcribe.{module.name}')
+          for module in pkgutil.walk_packages(sdw.transcribe.__path__, 'sdw.transcribe.'):
+              importlib.import_module(module.name)
           "
 
       - name: pytest
