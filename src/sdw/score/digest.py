@@ -138,8 +138,8 @@ def _language(block: Mapping[str, Any]) -> str:
 def _pairs(block: Mapping[str, Any]) -> str:
     """``k=v · k=v`` over a block, in file order.
 
-    The keys are kept rather than compacted into prose as ADR-0024's example does: a decode
-    constant that moved would then be reworded rather than shown.
+    Compacting into prose to match ADR-0024's example would reword a moved decode constant rather
+    than show it.
     """
     if not block:
         return ABSENT
