@@ -12,9 +12,10 @@ function-body import as one edge, and the distinction between them is the mechan
 `sdw --help` alive in a torch-free venv — so edges are tagged by node depth, and a violation reports
 the *path* rather than the fact.
 
-The `sdw.transcribe` clauses hold vacuously until that subpackage exists. That is deliberate: the
-rules are stated in full now, so the boundary is a check the first transcribe module meets rather
-than one someone remembers to extend.
+The `sdw.transcribe` clauses were written vacuous, before that subpackage existed, so the boundary
+would be a check its first module met rather than one someone remembered to extend. #164 landed it
+and they bind. `tests/unit/test_transcribe_imports.py` is #164's narrower stand-in over the same
+rules, and #165 retires it.
 """
 
 from __future__ import annotations

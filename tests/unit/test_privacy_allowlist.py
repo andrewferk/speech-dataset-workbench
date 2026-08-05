@@ -13,6 +13,9 @@ where its content is synthetic:
   personal speech. Tracked Records are allowlisted to ``examples/`` and
   ``tests/fixtures/``, whose Records are hand-authored or produced over synthetic tones.
 
+Committing either is the one failure a revert cannot undo, which is why both checks land early
+rather than at the end of the project.
+
 This is an **allowlist, not a prohibition**, which is what ADR-0026 overturned ADR-0021's rejection
 on: a committed golden is an entry rather than a hole. It catches the realistic accident — a Run
 directory from the operator's own corpus committed because it is a few kilobytes and looks like test
@@ -63,6 +66,8 @@ def test_every_tracked_wav_is_synthetic() -> None:
 
 
 def test_every_tracked_hypothesis_record_is_synthetic() -> None:
+    # The leading `*` is load-bearing: a bare `hypotheses.jsonl` pathspec matches only a Record at
+    # the repo root, and the accident this exists to catch is a whole Run directory copied in.
     offenders = [
         name
         for name in _tracked(f"*{RECORD_FILENAME}")

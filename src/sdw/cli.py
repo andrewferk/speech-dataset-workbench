@@ -43,6 +43,20 @@ def _parser() -> argparse.ArgumentParser:
         help="Preflight --data-in and print the quality digest. Writes nothing.",
     )
 
+    # No `--config` and no Scope flag, not even an empty one for symmetry with `build`: zero knobs
+    # is what makes a Hypothesis attributable, and an empty config section invites one (ADR-0017).
+    # Neither path defaults — both are operator-named external paths (ADR-0002, ADR-0021).
+    transcribe = subcommands.add_parser(
+        "transcribe",
+        help="Transcribe a built Dataset Version into a new Run under --eval-out.",
+    )
+    transcribe.add_argument(
+        "--dataset", type=Path, required=True, help="Built Dataset Version, read-only."
+    )
+    transcribe.add_argument(
+        "--eval-out", type=Path, required=True, help="Root that holds Runs; one is minted per call."
+    )
+
     # `score` shares nothing with the two dataset commands: no --data-in, no --config, and no
     # dataset argument of any kind — one Run directory and nothing else (ADR-0017/ADR-0018).
     score = subcommands.add_parser(
@@ -75,6 +89,10 @@ def main(argv: list[str] | None = None) -> int:
             from sdw import pipeline
 
             pipeline.build(data_in=args.data_in, data_out=args.data_out, config=args.config)
+        elif args.command == "transcribe":
+            from sdw.transcribe import pipeline as transcribe_pipeline
+
+            transcribe_pipeline.transcribe(dataset=args.dataset, eval_out=args.eval_out)
         elif args.command == "score":
             from sdw.score import command
 
