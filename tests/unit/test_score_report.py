@@ -91,7 +91,7 @@ def test_the_provenance_is_carried_whole(fixture: str) -> None:
 
 
 def test_the_normalizer_identity_strings_are_report_side() -> None:
-    # `run.json` is written by `transcribe`, before any Normalization has happened, so these
+    # `run.json` is written by `transcribe`, before any Text Normalization has happened, so these
     # cannot come from the Run (ADR-0020 redirecting ADR-0019's hand-off).
     tier_a, tier_b = report.normalizers()
 

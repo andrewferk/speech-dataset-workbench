@@ -94,7 +94,7 @@ def _splits_present(run: Run) -> tuple[str, ...]:
 def normalizers() -> tuple[str, str]:
     """The two Normalizer identity strings, in tier order (ADR-0018).
 
-    Report-side attribution: `run.json` is written by `transcribe`, before any Normalization has
-    happened, so these cannot come from the Run (ADR-0020).
+    Report-side attribution: `run.json` is written by `transcribe`, before any Text Normalization
+    has happened, so these cannot come from the Run (ADR-0020).
     """
     return TIER_A, TIER_B
