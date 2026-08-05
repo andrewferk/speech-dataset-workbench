@@ -82,9 +82,8 @@ def assemble(run: Run, *, split: str | None) -> Report:
 def _splits_present(run: Run) -> tuple[str, ...]:
     """Every Split the Record carries, ADR-0004's three first and anything else after.
 
-    A Split the eval path does not recognise is still **listed**, because the label claims to name
-    every Split present and a Sample counted in N-of-M but missing from the label would make that
-    claim false. The order stays total: the known three in ADR-0004's order, then the rest by name.
+    Filtering the tail to `SPLIT_ORDER` would drop a Split whose Samples N-of-M still counts,
+    making the label's claim to name every Split present false.
     """
     present = {sample.split for sample in run.record}
     known = tuple(name for name in SPLIT_ORDER if name in present)
