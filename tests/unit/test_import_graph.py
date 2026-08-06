@@ -1,184 +1,201 @@
-"""ADR-0023's three import rules, as an AST graph over `src/sdw/` (#165).
+"""The import boundary: three rules over `sdw.*` module prefixes, checked by AST (ADR-0023).
 
-The first test in the repo that reads source rather than running it. Rules 1 and 3 cannot be made
-structural — `sdw.pipeline` importing `sdw.score.metrics`, and `sdw.transcribe` importing
-`SPLIT_ORDER`, are same-distribution zero-dependency imports that would work perfectly and break
-nothing at runtime — so they get a check, ADR-0012's bar met one notch below its ideal because for
-these two there is no notch above.
+The map's founding claim about v0.2 is that isolation is **structural, not aspirational**. Exactly
+one of the three rules is genuinely structural — `sdw.score` importing anything behind the `asr`
+extra is an `ImportError` in the CI job that installs no extra, which is why that job may never gain
+it. The other two are same-distribution, zero-dependency imports that would work perfectly and break
+nothing at runtime, so they get this check: ADR-0012's bar met one notch below its ideal, because
+for these two there is no notch above.
 
-Edges are tagged module level or function body. That distinction is why `import-linter` could not
-express these rules, and why the subprocess `sys.modules` probe this file replaces was rejected: it
-is blind to the function-body import ADR-0023 sanctions in `cli.py`, which is also rule 3's most
-likely violation. The rules below count both kinds; the module-level-only view is
-`test_cli_dispatch.py`'s.
+`import-linter` cannot express what is checked here. It treats a module-level import and a
+function-body import as one edge, and the distinction between them is the mechanism keeping
+`sdw --help` alive in a torch-free venv — so edges are tagged by node depth, and a violation reports
+the *path* rather than the fact.
 
-Rule 2 is already structural — the `check` CI job installs no extra, so a module-level `import
-torch` under `sdw.score` reddens the whole suite there — and is asserted anyway, because a rule
-held only by the shape of a workflow file is a rule nobody reads.
+The `sdw.transcribe` clauses were written vacuous, before that subpackage existed, so the boundary
+would be a check its first module met rather than one someone remembered to extend. #164 landed it
+and they bind. #164's narrower stand-in, `tests/unit/test_transcribe_imports.py`, was a subprocess
+`sys.modules` probe blind to exactly the function-body import tagged here; #165 retired it rather
+than leaving two checks of one rule, one of which cannot see its likeliest violation.
 """
 
 from __future__ import annotations
 
 import ast
-from collections import deque
-from collections.abc import Sequence
+from collections.abc import Iterator
 from pathlib import Path
+from typing import NamedTuple
 
 import pytest
 
 import sdw
 
+PACKAGE_ROOT = Path(sdw.__file__).parent
 PACKAGE = "sdw"
-ROOT = Path(sdw.__file__).parent
 
-MODULE_LEVEL = "module level"
-FUNCTION_BODY = "function body"
+PIPELINE = "sdw.pipeline"
+TRANSCRIBE = "sdw.transcribe"
+SCORE = "sdw.score"
+FORBIDDEN_TO_EVAL = ("sdw.manifest", "sdw.provenance")
 
-# Interpreting the dataset through v0.1's own modules is the shortcut that kills the dogfood: an
-# under-specified Manifest would be read correctly by construction and nobody would find out
-# (ADR-0017). `sdw.serialization` is not on this list — byte-format of our own output is not dataset
-# interpretation (ADR-0019).
-V0_1_MANIFEST_MODULES = ("sdw.manifest", "sdw.provenance")
 
-Graph = dict[str, set[tuple[str, str]]]
+class Edge(NamedTuple):
+    """One import, tagged by the depth of the node that made it.
+
+    ``nested`` is true for an import inside a function or method — sanctioned in `sdw.cli`'s
+    dispatch branches, and rule 3's likeliest violation everywhere else.
+    """
+
+    importer: str
+    imported: str
+    nested: bool
+
+    def __str__(self) -> str:
+        return f"{self.imported} ({'nested' if self.nested else 'module-level'})"
+
+
+def _module_name(path: Path) -> str:
+    parts = path.relative_to(PACKAGE_ROOT).with_suffix("").parts
+    trimmed = parts[:-1] if parts[-1] == "__init__" else parts
+    return ".".join((PACKAGE, *trimmed))
+
+
+def _imports(node: ast.AST, module: str) -> Iterator[str]:
+    """The `sdw.*` modules one import statement names, relative forms resolved."""
+    package = module if _is_package(module) else module.rsplit(".", 1)[0]
+    if isinstance(node, ast.Import):
+        yield from (alias.name for alias in node.names if alias.name.startswith(f"{PACKAGE}."))
+        return
+    if not isinstance(node, ast.ImportFrom):
+        return
+    if node.level:
+        # `from . import x` / `from .y import z`, resolved against the importer's own package.
+        base = ".".join(package.split(".")[: len(package.split(".")) - node.level + 1])
+        base = f"{base}.{node.module}" if node.module else base
+    else:
+        base = node.module or ""
+    if not base.startswith(PACKAGE):
+        return
+    # `from sdw.score import digest` names a module; `from sdw.score.run import Sample` names a
+    # symbol. Both forms are emitted — an edge to a name that is not a module is inert.
+    yield base
+    yield from (f"{base}.{alias.name}" for alias in node.names)
+
+
+def _is_package(module: str) -> bool:
+    return (PACKAGE_ROOT / Path(*module.split(".")[1:]) / "__init__.py").is_file()
+
+
+def _parse() -> tuple[set[Edge], set[str]]:
+    """Every intra-`sdw` import in the source tree, tagged by node depth, and every module parsed.
+
+    The two are returned together because they must come from one walk: a module set derived from
+    the *edges* would omit every module that imports nothing, so "parses every module" would be a
+    claim about the graph rather than about the tree (ADR-0023).
+    """
+    edges: set[Edge] = set()
+    modules: set[str] = set()
+    for path in sorted(PACKAGE_ROOT.rglob("*.py")):
+        module = _module_name(path)
+        modules.add(module)
+        tree = ast.parse(path.read_text(encoding="utf-8"))
+        in_function = {
+            node
+            for parent in ast.walk(tree)
+            if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef)
+            for node in ast.walk(parent)
+        }
+        for node in ast.walk(tree):
+            nested = node in in_function
+            edges |= {Edge(module, imported, nested) for imported in _imports(node, module)}
+    return edges, modules
+
+
+EDGES, MODULES = _parse()
 
 
 def _under(module: str, prefix: str) -> bool:
     return module == prefix or module.startswith(f"{prefix}.")
 
 
-def _module_name(path: Path) -> str:
-    parts = path.relative_to(ROOT).with_suffix("").parts
-    if parts[-1] == "__init__":
-        parts = parts[:-1]
-    return ".".join((PACKAGE, *parts))
+def _path_to(sources: tuple[str, ...], targets: tuple[str, ...]) -> list[Edge] | None:
+    """The first path from anything under ``sources`` to anything under ``targets``, or ``None``.
 
-
-MODULES = {_module_name(path): path for path in sorted(ROOT.rglob("*.py"))}
-
-
-def _nearest(dotted: str) -> str:
-    """The module an imported name lives in: `sdw.errors.HardError` is an edge to `sdw.errors`."""
-    parts = dotted.split(".")
-    while parts and ".".join(parts) not in MODULES:
-        parts.pop()
-    return ".".join(parts)
-
-
-def _absolute(node: ast.ImportFrom, *, source: str) -> str:
-    """`node`'s module, with a relative form resolved against the module that wrote it."""
-    if node.level == 0:
-        return node.module or ""
-    base = source if MODULES[source].name == "__init__.py" else source.rpartition(".")[0]
-    for _ in range(node.level - 1):
-        base = base.rpartition(".")[0]
-    return f"{base}.{node.module}" if node.module else base
-
-
-def _targets(node: ast.AST, *, source: str) -> set[str]:
-    """The `sdw` modules one import statement reaches, or nothing for any other node."""
-    if isinstance(node, ast.Import):
-        return {_nearest(alias.name) for alias in node.names if _under(alias.name, PACKAGE)}
-    if not isinstance(node, ast.ImportFrom):
-        return set()
-    module = _absolute(node, source=source)
-    if not _under(module, PACKAGE):
-        return set()
-    # `from sdw.transcribe import audio` names a module and `from sdw.errors import HardError`
-    # names a class inside one; `_nearest` collapses both to the module that holds them.
-    return {_nearest(f"{module}.{alias.name}") for alias in node.names}
-
-
-def _module_edges(source: str, path: Path) -> set[tuple[str, str]]:
-    tree = ast.parse(path.read_text(encoding="utf-8"))
-    nested = {
-        node
-        for parent in ast.walk(tree)
-        if isinstance(parent, ast.FunctionDef | ast.AsyncFunctionDef)
-        for node in ast.walk(parent)
-    }
-    edges: set[tuple[str, str]] = set()
-    for node in ast.walk(tree):
-        tag = FUNCTION_BODY if node in nested else MODULE_LEVEL
-        edges |= {(target, tag) for target in _targets(node, source=source) if target}
-    return edges
-
-
-GRAPH: Graph = {source: _module_edges(source, path) for source, path in MODULES.items()}
-
-
-def _violation(start: str, forbidden: Sequence[str], graph: Graph = GRAPH) -> str | None:
-    """The shortest import path from `start` into `forbidden`, rendered, or `None` if there is none.
-
-    The path, not the fact: `sdw.pipeline → sdw.staging → sdw.score.metrics` names the import to
-    delete, where "rule 1 failed" leaves a reader to rebuild the graph by hand.
+    Breadth-first over the whole intra-package graph, so a violation reached through three
+    innocent-looking modules is found and reported as the chain it is.
     """
-    queue = deque([(start, start)])
-    seen = {start}
+    queue: list[tuple[str, list[Edge]]] = [
+        (module, [])
+        for module in sorted(MODULES)
+        if any(_under(module, source) for source in sources)
+    ]
+    seen = {module for module, _ in queue}
     while queue:
-        module, trail = queue.popleft()
-        for target, tag in sorted(graph.get(module, set())):
-            step = f"{trail} → {target}" + (f" [{tag}]" if tag == FUNCTION_BODY else "")
-            if any(_under(target, prefix) for prefix in forbidden):
-                return step
-            if target not in seen:
-                seen.add(target)
-                queue.append((target, step))
+        module, trail = queue.pop(0)
+        for edge in sorted(edge for edge in EDGES if edge.importer == module):
+            if any(_under(edge.imported, target) for target in targets):
+                return [*trail, edge]
+            if edge.imported not in seen and edge.imported in MODULES:
+                seen.add(edge.imported)
+                queue.append((edge.imported, [*trail, edge]))
     return None
 
 
-def _modules_under(prefix: str) -> list[str]:
-    return sorted(name for name in MODULES if _under(name, prefix))
+def _report(path: list[Edge]) -> str:
+    return " → ".join([path[0].importer, *(str(edge) for edge in path)])
 
 
-EVAL_MODULES = _modules_under("sdw.transcribe") + _modules_under("sdw.score")
-
-
-def test_the_graph_covers_the_package() -> None:
-    # Guards every rule below, each of which is vacuous over an empty or truncated module set.
-    assert {"sdw.cli", "sdw.pipeline", "sdw.transcribe.pipeline", "sdw.score.metrics"} <= set(
-        MODULES
-    )
-    assert EVAL_MODULES
-
-
-def test_a_module_level_import_is_an_edge() -> None:
-    assert ("sdw.serialization", MODULE_LEVEL) in GRAPH["sdw.transcribe.record"]
-
-
-def test_a_function_body_import_is_an_edge_tagged_as_one() -> None:
-    # The whole reason this file parses source instead of watching `sys.modules`: the dispatch
-    # branch import in `cli.py` is invisible to a runtime probe (ADR-0023).
-    assert ("sdw.transcribe.pipeline", FUNCTION_BODY) in GRAPH["sdw.cli"]
-    assert ("sdw.transcribe.pipeline", MODULE_LEVEL) not in GRAPH["sdw.cli"]
-
-
-def test_a_planted_violation_is_found_and_reported_as_a_path() -> None:
-    planted: Graph = {
-        "sdw.pipeline": {("sdw.staging", MODULE_LEVEL)},
-        "sdw.staging": {("sdw.score.metrics", FUNCTION_BODY)},
+def test_every_module_under_src_is_parsed() -> None:
+    # Guards the three rules below, each of which is vacuous over a graph missing its nodes. The
+    # vendored tree is parsed too: excluded from ruff and mypy (pyproject.toml), it is still source
+    # under `sdw.score`, and an import out of it would break the boundary like any other.
+    discovered = {
+        ".".join((PACKAGE, *path.relative_to(PACKAGE_ROOT).with_suffix("").parts)).removesuffix(
+            ".__init__"
+        )
+        for path in PACKAGE_ROOT.rglob("*.py")
     }
-    assert (
-        _violation("sdw.pipeline", ("sdw.score",), planted)
-        == "sdw.pipeline → sdw.staging → sdw.score.metrics [function body]"
+
+    assert discovered == MODULES
+    assert {"sdw.cli", "sdw.errors", "sdw.pipeline", "sdw.score.run"} <= MODULES
+
+
+def test_a_dispatch_import_is_tagged_nested() -> None:
+    # The `nested` flag is what the three rules below are read through, and nothing else asserts
+    # it holds a value: were tagging to break closed, every rule would still pass and the
+    # distinction this file exists to draw would be silently dead. `sdw.cli`'s dispatch branch is
+    # the sanctioned function-body import, so it is the one edge that must be tagged both ways.
+    assert Edge("sdw.cli", f"{TRANSCRIBE}.pipeline", True) in EDGES
+    assert Edge("sdw.cli", f"{TRANSCRIBE}.pipeline", False) not in EDGES
+
+
+def test_the_build_path_imports_nothing_from_the_eval_path() -> None:
+    # Rule 1: `sdw.pipeline`'s transitive closure reaches neither evaluation subpackage. A
+    # separate distribution would have made this structural; it also would have made rule 3 easier
+    # to violate, which is the boundary that actually needs help (ADR-0023).
+    violation = _path_to((PIPELINE,), (TRANSCRIBE, SCORE))
+    assert violation is None, f"build path reaches the eval path: {_report(violation or [])}"
+
+
+def test_scoring_imports_nothing_from_transcription() -> None:
+    # Rule 2, which the `check` CI job supplies structurally by installing no extra. Stated here
+    # anyway: an intra-package import needs no torch to resolve, so the job would stay green.
+    violation = _path_to((SCORE,), (TRANSCRIBE,))
+    assert violation is None, f"Scoring reaches Transcription: {_report(violation or [])}"
+
+
+@pytest.mark.parametrize("eval_path", [TRANSCRIBE, SCORE], ids=["transcribe", "score"])
+def test_the_eval_path_imports_no_manifest_or_provenance_module(eval_path: str) -> None:
+    # Rule 3, the stranger-consumer dogfood: the eval path parses the emitted JSONL itself, so an
+    # under-specified Manifest is caught by the code reading it rather than papered over by a
+    # shared constant. `sdw.serialization` is the one permitted import (ADR-0019).
+    violation = _path_to((eval_path,), FORBIDDEN_TO_EVAL)
+    assert violation is None, (
+        f"{eval_path} reaches the build path's readers: {_report(violation or [])}"
     )
 
 
-def test_the_build_path_reaches_nothing_under_the_eval_path() -> None:
-    """Rule 1: `sdw.pipeline`'s transitive closure imports no Transcription or Scoring module."""
-    found = _violation("sdw.pipeline", ("sdw.transcribe", "sdw.score"))
-    assert found is None, found
-
-
-@pytest.mark.parametrize("module", _modules_under("sdw.score"))
-def test_scoring_reaches_nothing_under_transcription(module: str) -> None:
-    """Rule 2: yesterday's Run is re-scorable on a machine that cannot transcribe (ADR-0017)."""
-    found = _violation(module, ("sdw.transcribe",))
-    assert found is None, found
-
-
-@pytest.mark.parametrize("module", EVAL_MODULES)
-def test_the_eval_path_reaches_no_v0_1_manifest_module(module: str) -> None:
-    """Rule 3: Transcription and Scoring read the emitted files like a stranger (ADR-0017)."""
-    found = _violation(module, V0_1_MANIFEST_MODULES)
-    assert found is None, found
+def test_the_eval_path_may_import_the_shared_serialization_module() -> None:
+    # The permission is asserted, not merely unenforced: a future tightening of rule 3 that swept
+    # `sdw.serialization` in would re-create the byte-format drift ADR-0006 exists to prevent.
+    assert _path_to((SCORE,), ("sdw.serialization",)) is not None
