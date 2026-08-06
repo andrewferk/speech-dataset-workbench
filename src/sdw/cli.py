@@ -8,10 +8,21 @@ The commands, and the mapping from an outcome to an exit code:
 """
 
 import argparse
+import importlib.util
 import sys
 from pathlib import Path
 
 from sdw.errors import HardError
+
+# Every name the `asr` extra provides. All of them, not a sentinel: a half-installed venv is then
+# diagnosed as a missing extra rather than crashing partway through the import (ADR-0023).
+ASR_MODULES = ("torch", "transformers")
+
+MISSING_ASR_EXTRA = (
+    "sdw transcribe needs the ASR extra, which is not installed.\n"
+    "       uv sync --extra asr        (in a checkout)\n"
+    "       pip install 'sdw[asr]'     (installed)"
+)
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -80,6 +91,17 @@ def _parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _require_asr_extra() -> None:
+    """Abort before anything under `sdw.transcribe` is imported when the extra is absent.
+
+    A `find_spec` probe, never a caught `ImportError` (ADR-0023): a typo'd internal module name
+    raises `ImportError` too, and reporting that as a missing extra sends the operator to fix the
+    one thing that is not wrong. `find_spec` locates a module without executing it, so this is free.
+    """
+    if any(importlib.util.find_spec(name) is None for name in ASR_MODULES):
+        raise HardError(MISSING_ASR_EXTRA)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
@@ -90,6 +112,10 @@ def main(argv: list[str] | None = None) -> int:
 
             pipeline.build(data_in=args.data_in, data_out=args.data_out, config=args.config)
         elif args.command == "transcribe":
+            # The earliest preflight there is: ahead of the import below, and far ahead of the
+            # structural aborts that are themselves in front of the model load (ADR-0023).
+            _require_asr_extra()
+
             from sdw.transcribe import pipeline as transcribe_pipeline
 
             transcribe_pipeline.transcribe(dataset=args.dataset, eval_out=args.eval_out)

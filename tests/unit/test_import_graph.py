@@ -14,8 +14,9 @@ the *path* rather than the fact.
 
 The `sdw.transcribe` clauses were written vacuous, before that subpackage existed, so the boundary
 would be a check its first module met rather than one someone remembered to extend. #164 landed it
-and they bind. `tests/unit/test_transcribe_imports.py` is #164's narrower stand-in over the same
-rules, and #165 retires it.
+and they bind. #164's narrower stand-in, `tests/unit/test_transcribe_imports.py`, was a subprocess
+`sys.modules` probe blind to exactly the function-body import tagged here; #165 retired it rather
+than leaving two checks of one rule, one of which cannot see its likeliest violation.
 """
 
 from __future__ import annotations
@@ -157,6 +158,15 @@ def test_every_module_under_src_is_parsed() -> None:
 
     assert discovered == MODULES
     assert {"sdw.cli", "sdw.errors", "sdw.pipeline", "sdw.score.run"} <= MODULES
+
+
+def test_a_dispatch_import_is_tagged_nested() -> None:
+    # The `nested` flag is what the three rules below are read through, and nothing else asserts
+    # it holds a value: were tagging to break closed, every rule would still pass and the
+    # distinction this file exists to draw would be silently dead. `sdw.cli`'s dispatch branch is
+    # the sanctioned function-body import, so it is the one edge that must be tagged both ways.
+    assert Edge("sdw.cli", f"{TRANSCRIBE}.pipeline", True) in EDGES
+    assert Edge("sdw.cli", f"{TRANSCRIBE}.pipeline", False) not in EDGES
 
 
 def test_the_build_path_imports_nothing_from_the_eval_path() -> None:
