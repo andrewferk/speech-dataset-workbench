@@ -1,9 +1,7 @@
 """Pooled at every level, Macro across a Breakdown's groups, and the five Breakdowns (ADR-0018).
 
-Aggregation runs over Samples that were **scored**, so a failed Sample never reaches here: it has no
-Hypothesis to align and is disclosed as a count instead (ADR-0018). Rates stay unrounded — rounding
-belongs to serialization (ADR-0007) — and every rate is derived from integer counts that are
-themselves emitted, so a later re-aggregation needs no re-scoring.
+Takes Samples that were scored — a failed Sample carries no Hypothesis to align, so it is counted
+elsewhere and never reaches here. Rates are unrounded; serialization rounds (ADR-0007).
 """
 
 import statistics
@@ -20,7 +18,7 @@ from sdw.score.text_normalization import NORMALIZERS, TIER_A
 TIERS = tuple(NORMALIZERS)
 
 # Reimplemented, never imported: the eval path is a stranger consumer of the build path's output,
-# and importing `sdw.split.SPLIT_ORDER` would breach that boundary for a four-element tuple
+# and importing `sdw.split.SPLIT_ORDER` would breach that boundary for a three-element tuple
 # (ADR-0017, ADR-0022). A Split outside it still sorts — see :func:`_split_key`.
 SPLIT_ORDER = ("train", "val", "test")
 
@@ -42,8 +40,8 @@ class ScoredSample:
 class Pooled:
     """Errors summed and denominators summed, divided once — the rate at any level (ADR-0018).
 
-    `samples` is this tier's SER denominator, which is why it sits beside the two alignments rather
-    than only on the group above.
+    `samples` is this pool's SER denominator: reading it off the group above instead would count
+    Samples this pool never held.
     """
 
     samples: int
@@ -53,12 +51,12 @@ class Pooled:
 
     @property
     def word_error_rate(self) -> float | None:
-        """`None` where every Reference in the pool normalized empty — undefined, not zero."""
+        """`None` where the pooled Reference holds no tokens — undefined, not zero."""
         return self.words.rate
 
     @property
     def character_error_rate(self) -> float | None:
-        """`None` where every Reference in the pool normalized empty — undefined, not zero."""
+        """`None` where the pooled Reference holds no characters — undefined, not zero."""
         return self.characters.rate
 
     @property
@@ -73,8 +71,8 @@ class Pooled:
 class MacroStatistic:
     """One Metric's spread across a Breakdown's groups, with the groups it could not use.
 
-    `excluded_groups` counts the groups whose Pooled rate is undefined *for this Metric*; with every
-    group excluded the three statistics are `None` rather than `0.0` (ADR-0018).
+    `excluded_groups` counts the groups whose Pooled rate is undefined *for this Metric*; excluding
+    all of them leaves the three statistics `None` (ADR-0018).
     """
 
     mean: float | None
@@ -97,7 +95,7 @@ class Group:
     """One Breakdown group: its attribute value, its size, and its Pooled numbers per tier.
 
     `samples` is the `n` printed beside every rate, so a group of one reads as a group of one
-    (ADR-0022). Nothing is suppressed and no threshold exists.
+    (ADR-0022).
     """
 
     value: str
@@ -161,9 +159,7 @@ def aggregate(samples: Sequence[ScoredSample]) -> Aggregation:
     """Pool the Scope, then build all five Breakdowns over it.
 
     Raises :class:`~sdw.errors.HardError` when the Scope holds zero Reference tokens under the
-    headline tier: `0.0` claims perfection and `inf` claims catastrophe, and neither is a
-    measurement (ADR-0018). A *group* in that state is emitted with `null` instead — one degenerate
-    group must not suppress an otherwise valid Report.
+    headline tier (ADR-0018). A *group* in that state is emitted with `null` instead.
     """
     pooled = _pool(samples)
     if pooled[TIER_A].words.reference_length == 0:
