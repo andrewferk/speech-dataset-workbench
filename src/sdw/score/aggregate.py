@@ -232,8 +232,7 @@ def _statistic(
         return MacroStatistic(None, None, None, len(rates))
     return MacroStatistic(
         mean=statistics.fmean(defined),
-        # Population, not sample: a Breakdown's groups *are* the population, so a one-group spread
-        # is 0.0 rather than a second encoding of "no number here" beside ADR-0018's `null`.
+        # Population, not sample — a one-group Breakdown has a spread of 0.0 (ADR-0018).
         standard_deviation=statistics.pstdev(defined),
         median=statistics.median(defined),
         excluded_groups=len(rates) - len(defined),
