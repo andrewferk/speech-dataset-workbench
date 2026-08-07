@@ -215,7 +215,7 @@ def _sum(alignments: Iterable[Alignment]) -> Alignment:
 
 
 def _macro(groups: Sequence[Group], tier: str) -> Macro:
-    """Mean, SD and median over each group's *Pooled* rate, never over per-Sample rates."""
+    """Mean, SD and median over each group's *Pooled* rate (ADR-0018)."""
     return Macro(
         word_error_rate=_statistic(groups, tier, lambda pooled: pooled.word_error_rate),
         character_error_rate=_statistic(groups, tier, lambda pooled: pooled.character_error_rate),
