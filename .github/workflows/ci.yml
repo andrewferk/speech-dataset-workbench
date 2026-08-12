@@ -33,8 +33,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # No input here pins the floor (ADR-0008): `uv sync` reads `.python-version` and installs
-      # that interpreter. Nothing fails if it stops doing so, hence the assertion after the sync.
+      # No interpreter is selected here: `uv sync` reads `.python-version`. A `python-version`
+      # input would put the floor in two places; the step after the sync checks the file was honoured.
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
