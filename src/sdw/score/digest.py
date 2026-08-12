@@ -60,8 +60,7 @@ EMPTY = '""'
 class _Metric(NamedTuple):
     """One Metric's label, and how to read it off a Pooled and off a Macro.
 
-    Accessors rather than attribute names: a renamed field is a type error here rather than a cell
-    that silently goes :data:`ABSENT`.
+    Accessors, not attribute names: a renamed field is a type error rather than an `ABSENT` cell.
     """
 
     label: str
@@ -169,11 +168,7 @@ def _provenance(provenance: Mapping[str, Any]) -> list[str]:
 
 
 def _headline(report: Report) -> list[str]:
-    """The Tier A Pooled WER, once, with its Scope attached (ADR-0022).
-
-    Tier A, not Tier B: heading the Report with the aggressive normalizer would lower the number by
-    hiding disfluency (ADR-0018).
-    """
+    """The Tier A Pooled WER, once, with its Scope attached (ADR-0018/ADR-0022)."""
     pooled = report.aggregation.pooled[TIER_A]
     return _wrapped(
         [
@@ -199,11 +194,8 @@ def _table(aggregation: Aggregation) -> list[str]:
 
 
 def _delta(aggregation: Aggregation) -> list[str]:
-    """Tier B − Tier A, a first-class number, named a **delta** and never a "deviation" (ADR-0018).
-
-    In percentage points, both sides being percentages here; the JSON rendering carries the
-    dimensionless rates.
-    """
+    """Tier B − Tier A in percentage points, named a **delta** and never a "deviation"
+    (ADR-0018)."""
     rows = [
         (
             metric.label,
@@ -246,11 +238,7 @@ def _breakdown(breakdown: Breakdown) -> list[str]:
 
 
 def _macro_rows(breakdown: Breakdown) -> list[tuple[str, ...]]:
-    """Mean, SD and median across the groups, and the per-Metric exclusion counts (ADR-0018).
-
-    The exclusions print as a row rather than a footnote: a Macro over two of five groups is a
-    different claim from one over five, and a diff has to show that as a value change.
-    """
+    """Mean, SD and median across the groups, and the per-Metric exclusion counts (ADR-0018)."""
     statistics: tuple[tuple[str, Callable[[MacroStatistic], str]], ...] = (
         ("macro mean", lambda statistic: _percent(statistic.mean)),
         ("macro sd", lambda statistic: _percent(statistic.standard_deviation)),
@@ -314,11 +302,7 @@ def _erred(metrics: SampleMetrics) -> bool:
 
 
 def _worst_first(sample: ScoredSample) -> tuple[int, float, str]:
-    """Tier A WER descending, ties by `id` ascending (ADR-0022).
-
-    An undefined WER cannot be ranked against a rate, so it sorts after every ranked Sample rather
-    than being given a number it does not have.
-    """
+    """Tier A WER descending, ties by `id` ascending; an undefined WER sorts last (ADR-0022)."""
     rate = sample.metrics[TIER_A].word_error_rate
     if rate is None:
         return (1, 0.0, sample.id)
@@ -339,23 +323,18 @@ def _text(text: str) -> str:
 
 
 def _percent(rate: float | None) -> str:
-    """``8.33%``, or :data:`ABSENT` for a rate ADR-0018 leaves undefined — never `0.00%`.
-
-    The canonical rate is rounded first, so the percentage is that number shifted rather than a
-    second rounding of the float behind it (ADR-0022).
-    """
+    """``8.33%``, or :data:`ABSENT` for a rate ADR-0018 leaves undefined — never `0.00%`."""
+    # Rounded at RATIO_DP before the shift: rounding the raw float instead is a second rounding,
+    # and the JSON document would then print a different number for the same rate (ADR-0022).
     if rate is None:
         return ABSENT
     return f"{round(rate, RATIO_DP) * 100:.{PERCENT_DP}f}%"
 
 
 def _points(later: float | None, earlier: float | None) -> str:
-    """``+1.25`` / ``-4.17`` percentage points, or :data:`ABSENT` if either side is undefined.
-
-    Subtracted after rounding, so the delta is the difference of the two numbers printed above it
-    rather than a third one. The sign always prints — a direction a diff changes, never one that
-    appears.
-    """
+    """``+1.25`` / ``-4.17`` percentage points, or :data:`ABSENT` if either side is undefined."""
+    # Subtracted after rounding: the delta must be the difference of the two numbers printed above
+    # it, not a third one derived from the floats behind them (ADR-0018).
     if later is None or earlier is None:
         return ABSENT
     difference = round(later, RATIO_DP) - round(earlier, RATIO_DP)
@@ -365,9 +344,7 @@ def _points(later: float | None, earlier: float | None) -> str:
 def _columns(rows: Sequence[Sequence[str]], *, indent: str) -> list[str]:
     """A table: first column left-aligned, every other right-aligned, widths from the content.
 
-    Widths are computed rather than fixed, so a long `session_id` or Prompt id keeps the columns
-    lined up instead of shifting one row's numbers out of the reader's eye line (v0.1's split
-    table). Every row must be the same length — a shape error, not a formatting one.
+    Every row must be the same length; a ragged one raises rather than misaligning.
     """
     widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
     return [
