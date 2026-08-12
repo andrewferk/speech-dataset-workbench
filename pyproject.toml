@@ -18,6 +18,11 @@ dependencies = [
     "more-itertools",
 ]
 
+# Floors, no caps and no `==` pins: an `==` would claim a reproducibility ADR-0016 disclaims, and
+# `run.json` already records the resolved versions per Run (ADR-0020, ADR-0023).
+[project.optional-dependencies]
+asr = ["transformers>=5", "torch>=2.13"]
+
 # `uv sync` installs the package (editable) into `.venv`, so nothing needs `src/` on the path
 # (ADR-0014, amending ADR-0012). `python -m sdw` keeps working alongside this.
 [project.scripts]
@@ -30,6 +35,9 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 path = "src/sdw/__init__.py"
 
+# A group, not an extra, while `asr` above is an extra, not a group — the asymmetry is the decision
+# (ADR-0023). Groups are absent from published metadata, so `dev` can never be installed by a
+# consumer of `sdw` and `pip install 'sdw[asr]'` could not work if `asr` were one.
 [dependency-groups]
 dev = [
     "ruff==0.14.4",
@@ -37,6 +45,18 @@ dev = [
     "pytest==9.0.1",
     "pytest-cov==7.0.0",
 ]
+
+# Linux resolves torch from the CPU wheels: unrestricted, `ubuntu-latest` pulls ~15 `nvidia-*-cu12`
+# wheels and ~2.5 GB per run into a 10 GB cache (ADR-0023). `explicit` keeps everything else on
+# PyPI. uv-only by construction — a Linux `pip install 'sdw[asr]'` gets CUDA torch, which is
+# supported but untested, and is a documented caveat rather than a defect.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [tool.ruff]
 src = ["src", "tests"]
@@ -60,8 +80,11 @@ files = ["src", "tests", "examples"]
 # importing it from checked code dragging it back in.
 exclude = ["^src/sdw/score/_vendor/"]
 
+# `torch` is deliberately absent: it ships `py.typed`, so an override would turn every torch call
+# into `Any` and degrade `--strict` from strong to vacuous without ever going red (ADR-0023). That
+# is why `mypy` runs in the `asr` job and cannot run in a torch-free venv at all.
 [[tool.mypy.overrides]]
-module = ["soundfile.*", "soxr.*", "scipy.*", "matplotlib.*"]
+module = ["soundfile.*", "soxr.*", "scipy.*", "matplotlib.*", "transformers.*"]
 ignore_missing_imports = true
 
 [[tool.mypy.overrides]]

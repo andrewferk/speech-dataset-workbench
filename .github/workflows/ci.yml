@@ -23,6 +23,11 @@ jobs:
           mise trust "$GITHUB_WORKSPACE/mise.toml"
           mise ls
 
+  # This job installs no extra, and that is load-bearing rather than incidental (ADR-0023): it is
+  # what makes `sdw score` in a torch-free venv a fact about the repository rather than a claim
+  # about test discipline, and what supplies import rule 2 — a module-level `import torch` under
+  # `sdw.score` is an `ImportError` here and the whole suite is red. Adding `--extra asr` would cost
+  # nothing visible on the day and delete both guarantees silently.
   check:
     runs-on: ubuntu-latest
     steps:
@@ -50,9 +55,47 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
-      - name: mypy --strict
-        run: uv run mypy --strict
-
-      # Coverage is measured, not enforced: no pass/fail percentage (ADR-0008).
+      # Coverage is measured, not enforced: no pass/fail percentage (ADR-0008). `mypy` is not here:
+      # torch gets no `ignore_missing_imports`, so `--strict` cannot run in this venv at all
+      # (ADR-0023).
       - name: pytest
         run: uv run pytest
+
+  # The only job that installs the extra, and `mypy --strict` has no other home (ADR-0023). It runs
+  # the suite again because this venv — extra installed — is the configuration the operator's own
+  # machine is permanently in, and no other job runs the tests there (ADR-0025). No weights are
+  # downloaded and no decode is performed, here or anywhere else in CI (ADR-0016, ADR-0025).
+  asr:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          python-version-file: .python-version
+
+      # ~200 MB rather than ~2.5 GB: torch resolves from the PyTorch CPU index under the Linux
+      # marker in `pyproject.toml` (ADR-0023). uv-only, by construction.
+      - name: Install the pinned toolchain and the asr extra
+        run: uv sync --locked --extra asr
+
+      # `--extra asr` on every step below is load-bearing, not redundant: `uv run` re-syncs the
+      # environment, so a plain one would uninstall the extra this job exists to install.
+      - name: mypy --strict
+        run: uv run --extra asr mypy --strict
+
+      # `mypy` proves the types line up; it does not prove the import resolves, and the
+      # `transformers` override is exactly what blinds it to a wrong `from transformers import X`
+      # (ADR-0025). Every module under `sdw.transcribe`, so the leaf that imports the extra is
+      # covered from the commit that adds it rather than the one after.
+      - name: leaf-module import smoke
+        run: |
+          uv run --extra asr python -c "
+          import importlib, pkgutil, sdw.transcribe
+          for module in pkgutil.walk_packages(sdw.transcribe.__path__, 'sdw.transcribe.'):
+              importlib.import_module(module.name)
+          "
+
+      - name: pytest
+        run: uv run --extra asr pytest
