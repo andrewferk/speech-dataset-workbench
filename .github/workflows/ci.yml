@@ -40,7 +40,7 @@ jobs:
           enable-cache: true
 
       - name: Install the pinned toolchain
-        run: uv sync --locked
+        run: uv sync --locked --python 3.14
 
       - uses: ./.github/actions/assert-python-floor
 
