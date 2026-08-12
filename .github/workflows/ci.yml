@@ -33,15 +33,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # No input here pins the floor (ADR-0008): `uv sync` reads `.python-version` and installs
+      # that interpreter. Nothing fails if it stops doing so, hence the assertion after the sync.
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          # The floor, pinned explicitly: requires-python is a range, so without this the
-          # runner's default interpreter could drift off 3.13 unnoticed.
-          python-version-file: .python-version
 
       - name: Install the pinned toolchain
         run: uv sync --locked
+
+      - uses: ./.github/actions/assert-python-floor
 
       # Runs from outside the checkout with no PYTHONPATH set anywhere, asserting the three
       # properties ADR-0014 buys: the console script resolves, the package imports without
@@ -73,12 +74,13 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           enable-cache: true
-          python-version-file: .python-version
 
       # ~200 MB rather than ~2.5 GB: torch resolves from the PyTorch CPU index under the Linux
       # marker in `pyproject.toml` (ADR-0023). uv-only, by construction.
       - name: Install the pinned toolchain and the asr extra
         run: uv sync --locked --extra asr
+
+      - uses: ./.github/actions/assert-python-floor
 
       # `--extra asr` on every step below is load-bearing, not redundant: `uv run` re-syncs the
       # environment, so a plain one would uninstall the extra this job exists to install.
