@@ -295,11 +295,9 @@ def _worklist(report: Report) -> list[str]:
 
 
 def _cells(cell: Callable[[_Metric, str, str], str]) -> tuple[str, ...]:
-    """One cell per Metric × tier, in the order every table columns them.
-
-    The single walk: a heading, a group row and a Macro row that disagreed about column order
-    would misfile numbers under a header that still read correctly.
-    """
+    """One cell per Metric × tier, in the order every table columns them."""
+    # The single walk: a heading and a row that disagreed about column order would file numbers
+    # under a header that still read correctly.
     return tuple(cell(metric, label, tier) for metric in _METRICS for label, tier in _TIERS)
 
 
@@ -339,11 +337,8 @@ def _percent(rate: float | None) -> str:
 
 
 def _points(tier_b: float | None, tier_a: float | None) -> str:
-    """Tier B − Tier A in percentage points, or :data:`ABSENT` if either side is undefined.
-
-    The order is the subtraction's direction, not an argument convention: B − A is the delta
-    ADR-0018 names, and reversing it would flip every sign in the section.
-    """
+    """Tier B − Tier A in percentage points, or :data:`ABSENT` if either side is undefined."""
+    # The parameter order is the subtraction's direction (ADR-0018): reversing it flips every sign.
     # Subtracted after rounding: the delta must be the difference of the two numbers printed above
     # it, not a third one derived from the floats behind them (ADR-0018).
     if tier_b is None or tier_a is None:
