@@ -112,8 +112,10 @@ def _report(run_dir: Path, long_form_count: int) -> None:
     imposing an architecture on the dataset (ADR-0016).
     """
     if long_form_count:
+        # "fell in", not "decoded in": under ADR-0016's constants the long-form regime does not
+        # decode at all, so naming the regime is honest where naming the outcome would not be.
         print(
-            f"warning: {long_form_count} Sample(s) decoded in the long-form regime "
+            f"warning: {long_form_count} Sample(s) fell in the long-form regime "
             f"(over {audio.LONG_FORM_FRAMES} frames)",
             file=sys.stderr,
         )

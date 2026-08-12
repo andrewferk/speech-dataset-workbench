@@ -283,6 +283,8 @@ class TestProvenance:
 
     @requires_the_extra
     def test_the_blocks_carry_every_field_the_adr_mandates(self) -> None:
+        import platform
+
         import torch
         import transformers
 
@@ -296,10 +298,13 @@ class TestProvenance:
             "license": "the-licence",
         }
         assert provenance.decode == DECODE
+        # Exactly ADR-0020's `runtime` block. Asserted whole rather than key-wise: a mandated field
+        # this repo never emits is invisible to any test that only checks the fields it emits.
         assert provenance.runtime == {
             "name": "transformers",
             "transformers_version": transformers.__version__,
             "torch_version": torch.__version__,
+            "python_version": platform.python_version(),
             "device": "cpu",
             "dtype": "float32",
             # Recorded, not pinned: each is a numerics input with no correct value (ADR-0016).

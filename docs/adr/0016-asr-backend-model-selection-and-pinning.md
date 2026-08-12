@@ -250,6 +250,22 @@ Aborting was the tempting alternative and is rejected on ADR-0007's own logic: v
 dataset's own data over an internal detail of Whisper's window size has stopped being a
 stranger-consumer and started imposing its architecture on the dataset.
 
+> **Implementation note (#166): the two constants above collide, and the collision is disclosed
+> rather than resolved.** `transformers` refuses long-form generation with `return_timestamps=False`
+> — `WhisperGenerationMixin._set_return_timestamps` raises `ValueError` for any input over 3000 mel
+> frames — so the paragraph above is wrong that a long-form Sample decodes under these constants. It
+> cannot. The seven constants are passed literally and unguarded, which is what this ADR fixed, so an
+> over-length Sample **fails its decode**: it is recorded as a present Record line with
+> `hypothesis: null` beside its `long_form: true` flag, and the Run continues (ADR-0017/ADR-0019).
+>
+> "Included and flagged, never rejected" therefore survives at the Record — no Sample is dropped and
+> no dataset is refused — while the Hypothesis itself is absent and visibly so. Setting
+> `return_timestamps=True` for the long-form regime alone would decode it, and is deliberately **not**
+> done here: it is a decode parameter varying per Sample within one Run, which is the same silent
+> inversion this ADR rejected language detection for. Making it decode is an amendment to this ADR,
+> not a code change. Only a Dataset Version built with `duration_max_s` above 30 s reaches this at
+> all; every default-configured one is inside the short-form window.
+
 ### Model identity in the Run's provenance
 
 `CONTEXT.md` places the provenance of a Run on the **Hypothesis Record**, which carries it

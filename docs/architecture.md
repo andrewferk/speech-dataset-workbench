@@ -128,11 +128,9 @@ One line per module. Mechanism is in the docstring; the choices behind it are in
 under-specified format is caught by the code reading it rather than papered over by a shared
 constant. `sdw.serialization` is the one permitted crossing, because two spellings of the same JSON
 is the drift that would replace. Within Transcription, exactly one leaf module imports the `asr`
-extra and the dispatch branch constructs the model there: every other module under
-`sdw/transcribe/` is importable with no extra installed, which is what puts the whole write path —
-line order, the failure marker, the sentinel — in the CI job that installs none. Scoring
-additionally imports nothing from Transcription, which is what lets `score` run in a venv that never
-installed the `asr` extra
+extra and the dispatch branch constructs the model there, so every other module under
+`sdw/transcribe/` stays importable with no extra installed. Scoring additionally imports nothing
+from Transcription, which is what lets `score` run in a venv that never installed the `asr` extra
 ([ADR-0023](adr/0023-packaging-optional-dependencies-and-the-import-boundary.md),
 [ADR-0019](adr/0019-hypothesis-record-format.md)).
 
