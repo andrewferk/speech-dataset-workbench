@@ -338,13 +338,17 @@ def _percent(rate: float | None) -> str:
     return f"{round(rate, RATIO_DP) * 100:.{PERCENT_DP}f}%"
 
 
-def _points(later: float | None, earlier: float | None) -> str:
-    """``+1.25`` / ``-4.17`` percentage points, or :data:`ABSENT` if either side is undefined."""
+def _points(tier_b: float | None, tier_a: float | None) -> str:
+    """Tier B − Tier A in percentage points, or :data:`ABSENT` if either side is undefined.
+
+    The order is the subtraction's direction, not an argument convention: B − A is the delta
+    ADR-0018 names, and reversing it would flip every sign in the section.
+    """
     # Subtracted after rounding: the delta must be the difference of the two numbers printed above
     # it, not a third one derived from the floats behind them (ADR-0018).
-    if later is None or earlier is None:
+    if tier_b is None or tier_a is None:
         return ABSENT
-    difference = round(later, RATIO_DP) - round(earlier, RATIO_DP)
+    difference = round(tier_b, RATIO_DP) - round(tier_a, RATIO_DP)
     return f"{difference * 100:+.{PERCENT_DP}f}"
 
 
