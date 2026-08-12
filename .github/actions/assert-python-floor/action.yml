@@ -1,0 +1,24 @@
+name: Assert the Python floor
+description: Fail if the interpreter in .venv is not the one .python-version names.
+
+# Read from `.venv` rather than through `uv run`: `uv run` re-derives the interpreter from
+# `.python-version` and would re-sync, so it can only ever agree with itself. `pyvenv.cfg`'s
+# interpreter is the artifact `uv sync` actually produced.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        pin="$GITHUB_WORKSPACE/.python-version"
+        if [ ! -f "$pin" ]; then
+          echo "::error::.python-version is missing — it is the only place the Python floor is written"
+          exit 1
+        fi
+        want=$(head -n 1 "$pin" | tr -d '[:space:]')
+        got=$("$GITHUB_WORKSPACE/.venv/bin/python" -c 'import sys; print("%d.%d.%d" % sys.version_info[:3])')
+        # Equal, or `got` is a patch release of `want`. Not `case`, which would glob-expand a pin.
+        if [ "$got" != "$want" ] && [ "${got#"$want".}" = "$got" ]; then
+          echo "::error::.python-version pins $want but .venv has CPython $got"
+          exit 1
+        fi
+        echo ".venv is CPython $got; .python-version pins $want"
