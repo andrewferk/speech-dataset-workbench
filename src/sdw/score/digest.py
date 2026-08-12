@@ -25,6 +25,7 @@ from sdw.score.aggregate import (
     TIERS,
     Aggregation,
     Breakdown,
+    Group,
     Macro,
     MacroStatistic,
     Pooled,
@@ -219,22 +220,19 @@ def _breakdown(breakdown: Breakdown) -> list[str]:
     group rate prints :data:`ABSENT` rather than vanishing.
     """
     heading = f"Breakdown — {breakdown.attribute}, {len(breakdown.groups)} group(s)"
-    columns = tuple(f"{metric.label} {tier}" for metric in _METRICS for tier, _ in _TIERS)
-    rows = [("group", "n", *columns)]
-    rows += [
-        (
-            group.value,
-            str(group.samples),
-            *(
-                _percent(metric.pooled(group.pooled[tier]))
-                for metric in _METRICS
-                for _, tier in _TIERS
-            ),
-        )
-        for group in breakdown.groups
-    ]
+    rows = [("group", "n", *_cells(lambda metric, label, _: f"{metric.label} {label}"))]
+    rows += [_group_row(group) for group in breakdown.groups]
     rows += _macro_rows(breakdown)
     return [heading, *_columns(rows, indent="  ")]
+
+
+def _group_row(group: Group) -> tuple[str, ...]:
+    """One group: its attribute value, its `n`, and its Pooled rate per Metric per tier."""
+    return (
+        group.value,
+        str(group.samples),
+        *_cells(lambda metric, _, tier: _percent(metric.pooled(group.pooled[tier]))),
+    )
 
 
 def _macro_rows(breakdown: Breakdown) -> list[tuple[str, ...]]:
@@ -246,18 +244,18 @@ def _macro_rows(breakdown: Breakdown) -> list[tuple[str, ...]]:
         # `n` is the group count, so the exclusions are stated in groups, not Samples.
         ("groups excluded", lambda statistic: str(statistic.excluded_groups)),
     )
-    return [
-        (
-            label,
-            ABSENT,
-            *(
-                cell(metric.macro(breakdown.macro[tier]))
-                for metric in _METRICS
-                for _, tier in _TIERS
-            ),
-        )
-        for label, cell in statistics
-    ]
+    return [_statistic_row(breakdown, label, cell) for label, cell in statistics]
+
+
+def _statistic_row(
+    breakdown: Breakdown, label: str, cell: Callable[[MacroStatistic], str]
+) -> tuple[str, ...]:
+    """One Macro row; the `n` column is :data:`ABSENT` because a statistic has no group count."""
+    return (
+        label,
+        ABSENT,
+        *_cells(lambda metric, _, tier: cell(metric.macro(breakdown.macro[tier]))),
+    )
 
 
 def _worklist(report: Report) -> list[str]:
@@ -294,6 +292,15 @@ def _worklist(report: Report) -> list[str]:
             label_width=max(len(sample.id), len("  ref")),
         )
     return lines
+
+
+def _cells(cell: Callable[[_Metric, str, str], str]) -> tuple[str, ...]:
+    """One cell per Metric × tier, in the order every table columns them.
+
+    The single walk: a heading, a group row and a Macro row that disagreed about column order
+    would misfile numbers under a header that still read correctly.
+    """
+    return tuple(cell(metric, label, tier) for metric in _METRICS for label, tier in _TIERS)
 
 
 def _erred(metrics: SampleMetrics) -> bool:
