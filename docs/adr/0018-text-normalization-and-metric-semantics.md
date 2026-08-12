@@ -337,6 +337,18 @@ insertions to the numerator and zero to the denominator. No division by zero eve
   ours or a later one — that means to average Samples directly.
 - **A Scope with zero total Reference tokens is an error, not a number.** `0.0` claims perfection and
   `inf` claims catastrophe; neither is a measurement.
+
+  > **Annotated by #161: the refusal is evaluated under Tier A only, and a Tier B Scope that
+  > normalizes away entirely reports `null` instead.** As written the rule names no tier, and
+  > applying it to both would contradict this ADR's own load-bearing edge rule two paragraphs
+  > above: empty normalized References *"arise almost exclusively under Tier B"*, so a corpus with
+  > a perfectly well-defined headline could be refused for a condition the headline never sees, and
+  > the paired A/B delta — *"the entire justification for computing two tiers"* — would be lost with
+  > it. Tier A is the headline (§*Tier A is the headline*), and the refusal exists because *"the
+  > alternative is a Report whose single number is a fiction"*; that reasoning binds the number the
+  > refusal protects, not every number in the Report. A Tier B Pooled rate with a zero denominator
+  > is already covered by the undefined-ness table below, which is the mechanism for a rate that has
+  > no denominator but does not invalidate the Report.
 - **WER > 1.0 is never clamped** — ratifying ADR-0015. #128 cites a real published **287.4%**, and
   ADR-0016 already designated an unclamped WER as the surfacing mechanism for a blown transcript.
 - **No distinct "runaway decode" condition.** A flag needs a threshold, and a threshold is a knob
@@ -370,6 +382,19 @@ and which #128 measured **6.2 points apart** on four speakers in NIST's own ship
 free from counts already held, and the map's charting note applies: *whichever loses should still be
 reported if it is cheap, because the two diverge and a reader will assume the one you did not
 compute.*
+
+> **Annotated by #161: the standard deviation is the *population* estimator, which departs from the
+> `sclite` shape this paragraph cites.** Borrowing NIST's shape left the estimator unnamed, and the
+> two answers differ in output a reader sees: over group rates `0.1` and `0.3` the population
+> estimator gives `0.1` and the sample estimator `0.1414`. A Breakdown's groups are not a sample
+> drawn from some larger population of Sessions or Devices — they **are** every group the Scope
+> holds, which is the definition the population estimator states. The decisive case is a Breakdown
+> with **one** group, which this corpus reaches easily (a single Device, a single Environment, a
+> Scope narrowed by `--split`): the population estimator gives a true `0.0`, while the sample
+> estimator is undefined and would mint a second `null` — a *"no number here"* beside the one this
+> ADR already assigns a precise meaning. One spelling of absence is worth more than the estimator
+> precedent. The mean and median are unaffected, and every count remains exact, so a consumer
+> preferring the sample estimator can recompute it without re-scoring.
 
 **What Macro averages over is the group's Pooled rate — not the per-Sample rates inside it.** This
 **names a unit ADR-0015 deliberately left generic**: that ADR defines Macro-average as averaging
