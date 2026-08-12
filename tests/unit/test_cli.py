@@ -226,21 +226,23 @@ class TestTranscribe:
             main([*argv, flag, "whatever"])
         assert exc.value.code != 0
 
-    def test_the_absent_backend_is_a_named_hard_error(
+    def test_a_structural_failure_is_named_before_the_model_loads(
         self,
         data_in: Path,
         eval_out: Path,
         capsys: pytest.CaptureFixture[str],
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        # #166 constructs the model in the dispatch branch; until then the command refuses rather
-        # than inventing a Hypothesis, and writes nothing under `--eval-out` (ADR-0025). The extra
-        # probe now runs first (ADR-0023) and would answer instead in a venv without it — the probe
-        # itself is `tests/unit/test_asr_extra.py`'s subject.
+        # `--dataset` is pointed at a `--data-in` tree, which is not a Dataset Version. The
+        # preflight answers, the thunk that would load 1.6 GB of weights is never called, and
+        # nothing lands under `--eval-out` (#166, ADR-0017). That this passes in a venv with no ASR
+        # extra is the proof of the ordering: an eager model load would `ImportError` here.
+        # The extra probe runs first (ADR-0023) and would answer instead — the probe itself is
+        # `tests/unit/test_asr_extra.py`'s subject.
         monkeypatch.setattr(cli, "ASR_MODULES", ("sys",))
         argv = ["transcribe", "--dataset", str(data_in), "--eval-out", str(eval_out)]
         assert main(argv) == 1
-        assert "no ASR backend yet" in capsys.readouterr().err
+        assert "not a Dataset Version" in capsys.readouterr().err
         assert not eval_out.exists()
 
 

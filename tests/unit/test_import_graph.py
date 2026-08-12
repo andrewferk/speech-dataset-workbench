@@ -1,11 +1,14 @@
-"""The import boundary: three rules over `sdw.*` module prefixes, checked by AST (ADR-0023).
+"""The import boundary: four rules, three over `sdw.*` prefixes and one over the `asr` extra's own
+distributions, all checked by AST (ADR-0023).
 
 The map's founding claim about v0.2 is that isolation is **structural, not aspirational**. Exactly
-one of the three rules is genuinely structural — `sdw.score` importing anything behind the `asr`
-extra is an `ImportError` in the CI job that installs no extra, which is why that job may never gain
-it. The other two are same-distribution, zero-dependency imports that would work perfectly and break
-nothing at runtime, so they get this check: ADR-0012's bar met one notch below its ideal, because
-for these two there is no notch above.
+one of the first three rules is genuinely structural — `sdw.score` importing anything behind the
+`asr` extra is an `ImportError` in the CI job that installs no extra, which is why that job may
+never gain it. The other two are same-distribution, zero-dependency imports that would work
+perfectly and break nothing at runtime, so they get this check: ADR-0012's bar met one notch below
+its ideal, because for these two there is no notch above. Rule 4, added with the model itself
+(#166), is the same shape: the `check` job catches the violations it happens to import, and this
+catches the rest.
 
 `import-linter` cannot express what is checked here. It treats a module-level import and a
 function-body import as one edge, and the distinction between them is the mechanism keeping
@@ -37,6 +40,12 @@ PIPELINE = "sdw.pipeline"
 TRANSCRIBE = "sdw.transcribe"
 SCORE = "sdw.score"
 FORBIDDEN_TO_EVAL = ("sdw.manifest", "sdw.provenance")
+
+# The distributions the `asr` extra provides, as import names. Rule 4 below is stated over these
+# rather than over `sdw.cli.ASR_MODULES` on purpose: that tuple is a *probe* list and this is a
+# *boundary*, and a test that read the one to check the other could not tell a widened boundary from
+# a widened probe (ADR-0023).
+ASR_PACKAGES = ("torch", "transformers")
 
 
 class Edge(NamedTuple):
@@ -86,15 +95,30 @@ def _is_package(module: str) -> bool:
     return (PACKAGE_ROOT / Path(*module.split(".")[1:]) / "__init__.py").is_file()
 
 
-def _parse() -> tuple[set[Edge], set[str]]:
-    """Every intra-`sdw` import in the source tree, tagged by node depth, and every module parsed.
+def _imports_the_extra(node: ast.AST) -> bool:
+    """Whether one import statement names a distribution the `asr` extra provides.
 
-    The two are returned together because they must come from one walk: a module set derived from
+    Depth is not tagged here, and that is the point: a function-body `import torch` keeps the module
+    importable in a torch-free venv, so it would pass an import-time probe while still putting the
+    extra behind a second module. Rule 4 is a rule about *which file may name it at all*.
+    """
+    if isinstance(node, ast.Import):
+        return any(alias.name.split(".")[0] in ASR_PACKAGES for alias in node.names)
+    if isinstance(node, ast.ImportFrom):
+        return not node.level and (node.module or "").split(".")[0] in ASR_PACKAGES
+    return False
+
+
+def _parse() -> tuple[set[Edge], set[str], set[str]]:
+    """Every intra-`sdw` import tagged by node depth, every module parsed, and every extra importer.
+
+    The three are returned together because they must come from one walk: a module set derived from
     the *edges* would omit every module that imports nothing, so "parses every module" would be a
     claim about the graph rather than about the tree (ADR-0023).
     """
     edges: set[Edge] = set()
     modules: set[str] = set()
+    asr: set[str] = set()
     for path in sorted(PACKAGE_ROOT.rglob("*.py")):
         module = _module_name(path)
         modules.add(module)
@@ -108,10 +132,12 @@ def _parse() -> tuple[set[Edge], set[str]]:
         for node in ast.walk(tree):
             nested = node in in_function
             edges |= {Edge(module, imported, nested) for imported in _imports(node, module)}
-    return edges, modules
+            if _imports_the_extra(node):
+                asr.add(module)
+    return edges, modules, asr
 
 
-EDGES, MODULES = _parse()
+EDGES, MODULES, ASR_IMPORTERS = _parse()
 
 
 def _under(module: str, prefix: str) -> bool:
@@ -193,6 +219,29 @@ def test_the_eval_path_imports_no_manifest_or_provenance_module(eval_path: str) 
     assert violation is None, (
         f"{eval_path} reaches the build path's readers: {_report(violation or [])}"
     )
+
+
+def test_exactly_one_leaf_module_under_transcribe_imports_the_asr_extra() -> None:
+    # Rule 4 (#166, ADR-0016/ADR-0025). The `check` job supplies half of this structurally — a
+    # module-level `import torch` in a module the fake-backend suite imports is an `ImportError`
+    # there — but only half: a *second* leaf nothing imports at test time would keep that job green
+    # while doubling the surface the `asr` job's smoke has to cover, and a nested `import torch`
+    # anywhere would keep it green outright. Both are the same erosion, so both are named here.
+    assert len(ASR_IMPORTERS) == 1, f"the asr extra is imported by: {sorted(ASR_IMPORTERS)}"
+    (leaf,) = ASR_IMPORTERS
+    assert leaf.startswith(f"{TRANSCRIBE}.")
+    # A leaf, not a subpackage: an `__init__` importing the extra would drag it into every
+    # `from sdw.transcribe.x import y` and delete the boundary without touching the count above.
+    assert not _is_package(leaf)
+
+
+def test_the_module_that_calls_the_model_is_the_one_that_imports_it() -> None:
+    # The count above is satisfiable by an empty shim, which would move the extra one module away
+    # from the call it exists for and leave `mypy --strict` typing the call site against nothing.
+    (leaf,) = ASR_IMPORTERS
+    assert leaf == f"{TRANSCRIBE}.whisper"
+    assert Edge(f"{TRANSCRIBE}.pipeline", leaf, True) in EDGES
+    assert Edge(f"{TRANSCRIBE}.pipeline", leaf, False) not in EDGES
 
 
 def test_the_eval_path_may_import_the_shared_serialization_module() -> None:

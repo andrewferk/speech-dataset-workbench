@@ -14,7 +14,6 @@ from pathlib import Path
 import numpy as np
 import numpy.typing as npt
 
-from sdw.errors import HardError
 from sdw.transcribe import audio, provenance, record
 from sdw.transcribe.backend import Backend, Language, resolve_language
 from sdw.transcribe.dataset import ENCODING, Sample
@@ -25,13 +24,17 @@ def transcribe(*, dataset: Path, eval_out: Path) -> None:
     """The CLI's entry: hand :func:`run` the thunk that loads the pinned model.
 
     The import of the ASR extra lives inside that thunk, which is what keeps every other module
-    under `sdw.transcribe` importable with no extra installed (ADR-0023, ADR-0025). #166 fills this
-    in; until it does the command parses and refuses, rather than inventing a Hypothesis.
+    under `sdw.transcribe` importable with no extra installed (ADR-0023, ADR-0025). The thunk takes
+    no argument and reads none: the checkpoint is a source constant in the leaf, so there is nothing
+    to pass and nothing to select (ADR-0016).
     """
-    raise HardError(
-        "sdw transcribe has no ASR backend yet — the pinned model lands with #166 (ADR-0016). "
-        "Everything else in the command is built: preflight, Hypothesis Record, and run.json."
-    )
+
+    def load_backend() -> Backend:
+        from sdw.transcribe import whisper
+
+        return whisper.load()
+
+    run(dataset=dataset, eval_out=eval_out, load_backend=load_backend)
 
 
 def run(*, dataset: Path, eval_out: Path, load_backend: Callable[[], Backend]) -> Path:
@@ -46,6 +49,9 @@ def run(*, dataset: Path, eval_out: Path, load_backend: Callable[[], Backend]) -
     version = preflight(root=dataset, run_dir=run_dir)
     # A thunk, not a Backend: the preflight has to finish before the checkpoint is loaded, or a
     # dataset knowably broken in seconds costs the operator the model load first (ADR-0017).
+    # Resolving the weights is the second preflight phase, and it sits above the `mkdir` below for
+    # the same reason the first one does — weights that will not resolve cost no Run at all
+    # (ADR-0016).
     backend = load_backend()
     language = resolve_language(version.descriptor.lang)
 
