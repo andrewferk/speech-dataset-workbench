@@ -26,8 +26,7 @@ from sdw.errors import HardError
 from sdw.transcribe import audio
 from sdw.transcribe.backend import BackendProvenance, Language
 
-# A sha, never a tag or a branch: those could name different bytes online than the cached ones, and
-# the offline Run would be the one telling the truth (ADR-0016).
+# A sha, never a tag or a branch (ADR-0016).
 REPO_ID = "openai/whisper-large-v3-turbo"
 REVISION = "41f01f3fe87f28c78e2fbf8b568835947dd65ed9"
 
@@ -51,8 +50,7 @@ DECODE: Mapping[str, Any] = {
     "num_beams": 1,
     "temperature": None,
     "condition_on_prev_tokens": False,
-    # Adding a guard here — a repetition penalty, an n-gram block, a length cap — changes the model
-    # output to flatter the Metric (ADR-0016).
+    # No guard joins these: no repetition penalty, no n-gram block, no length cap (ADR-0016).
     "return_timestamps": False,
 }
 
@@ -71,8 +69,7 @@ def load() -> Whisper:
     Called after the structural preflight and before the Run directory exists, so unresolvable
     weights cost no Run (ADR-0017). The three network states of ADR-0016, in the order tried.
     """
-    # Cache-first, so a warm cache never touches the network and `HF_HUB_OFFLINE` is never
-    # overridden by this tool (ADR-0016).
+    # Cache-first: swapping these two attempts reaches the network on a warm cache (ADR-0016).
     try:
         return _load(local_files_only=True)
     except OSError:
@@ -95,9 +92,8 @@ def _load(*, local_files_only: bool) -> Whisper:
     model = WhisperForConditionalGeneration.from_pretrained(
         REPO_ID, revision=REVISION, dtype=DTYPE, local_files_only=local_files_only
     )
-    # Checked, not moved: with no `device_map` and no `.to(...)` there is no line here that could
-    # name an accelerator, so ADR-0016's device decision is a property of the file.
-    # `from_pretrained` also returns the model in evaluation mode, which it documents.
+    # Checked, not moved: a `.to(...)` or a `device_map` here is the accelerator path ADR-0016
+    # refuses to have.
     if model.device.type != DEVICE:
         raise HardError(f"the checkpoint loaded onto {model.device.type}, not {DEVICE}")
     return Whisper(

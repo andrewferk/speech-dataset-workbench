@@ -21,12 +21,9 @@ from sdw.transcribe.preflight import preflight
 
 
 def transcribe(*, dataset: Path, eval_out: Path) -> None:
-    """The CLI's entry: hand :func:`run` the thunk that loads the pinned model.
+    """Transcribe `dataset` into one new Run under `eval_out`, or raise :class:`HardError`.
 
-    The import of the ASR extra lives inside that thunk, which is what keeps every other module
-    under `sdw.transcribe` importable with no extra installed (ADR-0023, ADR-0025). The thunk takes
-    no argument and reads none: the checkpoint is a source constant in the leaf, so there is nothing
-    to pass and nothing to select (ADR-0016).
+    Hoisting the thunk's import to module level breaks the torch-free job (ADR-0023, ADR-0025).
     """
 
     def load_backend() -> Backend:

@@ -139,8 +139,7 @@ class TestPinning:
 
     def test_the_repo_id_and_revision_are_source_constants(self) -> None:
         assert _constant("REPO_ID") == REPO_ID
-        # A sha, never a tag or a branch: those could name different bytes online than the ones
-        # already cached, and the offline Run would be the one telling the truth.
+        # A sha, never a tag or a branch (ADR-0016).
         assert _constant("REVISION") == REVISION
         assert len(REVISION) == 40
 

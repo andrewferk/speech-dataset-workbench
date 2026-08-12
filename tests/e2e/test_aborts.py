@@ -12,7 +12,7 @@ enumerates: an undecodable Original, a zero-frame WAV, a malformed `recordings.c
 escapes `--data-in` (absolute and `..`-traversal, the two mechanisms ADR-0006 names), and an illegal
 split ratio (both a wrong sum and a non-positive ratio, the two ADR-0004 rejects).
 
-`score`'s own refusals extend the table at the foot of this file (ADR-0025).
+`score`'s and `transcribe`'s own refusals extend the table at the foot of this file (ADR-0025).
 """
 
 from __future__ import annotations
@@ -24,6 +24,7 @@ from typing import NamedTuple
 
 import pytest
 
+from sdw import cli
 from sdw.cli import main
 from tests import synth
 
@@ -196,3 +197,73 @@ def test_score_aborts_and_names_its_cause(
     assert error_fragment in captured.err
     # A refusal, not a partial Report: nothing of the header reaches stdout.
     assert not captured.out
+
+
+# --- transcribe's refusals ------------------------------------------------------------------------
+#
+# The table's third section (#166). Every row here breaks a *built* Dataset Version a single way and
+# asserts the same contract the build rows do: a non-zero exit, the cause named on stderr, and no
+# `--eval-out` on disk. The last is the sharp one — a Run directory is created at its final name and
+# written into (ADR-0021), so a preflight that aborted late would leave a directory behind that
+# nothing sweeps.
+#
+# `cli.ASR_MODULES` is pointed at a module every venv has, because the extra probe runs ahead of
+# everything (ADR-0023): without it the torch-free `check` job would assert the missing-extra
+# message for every row instead of the row's own cause. The probe itself is
+# `tests/unit/test_asr_extra.py`'s subject. Nothing here loads a checkpoint — each cause is
+# structural and answers first.
+#
+# **The weights row is deliberately absent.** ADR-0016's third network state — no network, no
+# cache — is `whisper.load()`'s `HardError`, and no test reaches it because no job downloads weights
+# (ADR-0025). What is testable is the property it rests on, and
+# `tests/e2e/test_transcribe.py::TestWeightResolution` holds it: a backend that refuses to load
+# aborts above the `mkdir`, leaving no Run.
+
+BreakDataset = Callable[[Path], None]
+
+
+def _no_descriptor(dataset: Path) -> None:
+    # Without `dataset.json` the tree is not a Dataset Version at all (ADR-0017).
+    (dataset / "dataset.json").unlink()
+
+
+def _missing_manifest(dataset: Path) -> None:
+    (dataset / "test.jsonl").unlink()
+
+
+def _undecodable_sample(dataset: Path) -> None:
+    # The Normalized audio moved after the build — the input an operator is likeliest to have
+    # disturbed, and the one that must not surface halfway through a 40-minute Run (ADR-0017).
+    wav = next(iter(sorted(dataset.rglob("*.wav"))))
+    synth.write_non_wav(wav)
+
+
+TRANSCRIBE_ABORT_CASES = [
+    pytest.param(_no_descriptor, "not a Dataset Version", id="no-dataset-json"),
+    pytest.param(_missing_manifest, "Manifest is missing", id="missing-manifest"),
+    pytest.param(_undecodable_sample, "will not decode", id="undecodable-audio"),
+]
+
+
+@pytest.mark.parametrize(("break_dataset", "error_fragment"), TRANSCRIBE_ABORT_CASES)
+def test_transcribe_aborts_with_no_durable_eval_out(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
+    break_dataset: BreakDataset,
+    error_fragment: str,
+) -> None:
+    monkeypatch.setattr(cli, "ASR_MODULES", ("sys",))
+    data_in = tmp_path / "in"
+    synth.write_reference_tree(data_in)
+    dataset = tmp_path / "dataset"
+    assert main(["build", "--data-in", str(data_in), "--data-out", str(dataset)]) == 0
+    break_dataset(dataset)
+    eval_out = tmp_path / "eval"
+    capsys.readouterr()
+
+    exit_code = main(["transcribe", "--dataset", str(dataset), "--eval-out", str(eval_out)])
+
+    assert exit_code != 0
+    assert error_fragment in capsys.readouterr().err
+    assert not eval_out.exists()
