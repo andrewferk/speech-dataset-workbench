@@ -1,0 +1,86 @@
+Scope        train, test (every Split present)
+Samples      3 of 3 scored — 0 Transcription failure(s), 0 long_form
+Reference    the Prompt — so every number below measures recognition error plus speaker deviation,
+             and a Sample where the speaker departed from the Prompt scores as an error
+Comparing    compare only Runs of equal Scope; once a model has trained on train, only test is
+             honest. The comparison this number exists for is paired against a Run over the same
+             Samples, and rests on a run-to-run non-determinism floor this project has not measured.
+Attribution  Normalizers sdw-tier-a/1 and whisper-english/b80bcf6 · scored by sdw 0.1.0
+
+Transcription conditions — must match to compare
+  model            openai/whisper-large-v3-turbo @ 41f01f3fe87f28c78e2fbf8b568835947dd65ed9 (mit)
+  decode           task=transcribe · do_sample=false · num_beams=1 · temperature=null ·
+                   condition_on_prev_tokens=false · return_timestamps=false
+  language         en (declared)
+Dataset — must match, or escalate to a masked diff of the two Records
+  dataset_version  sha256:9f2ac41800000000000000000000000000000000000000000000000000000000
+Disclosed — may differ; the same question under different arithmetic
+  runtime          name=transformers · transformers_version=5.14.1 · torch_version=2.13.0 ·
+                   python_version=3.13.1 · device=cpu · dtype=float32 · attn_implementation=sdpa ·
+                   torch_num_threads=8
+  host             platform_machine=arm64 · platform_system=Darwin
+  tool             transcribed 0.2.0
+
+Headline  Tier A Pooled WER 27.27% over 3 scored Sample(s), Scope train, test (every Split present)
+
+Pooled over the Scope
+  Metric  Tier A  Tier B
+  WER     27.27%  15.38%
+  CER     12.00%   3.51%
+  SER     33.33%  33.33%
+
+Tier B − Tier A delta, in percentage points (whisper-english/b80bcf6 − sdw-tier-a/1)
+  WER  -11.89
+  CER   -8.49
+  SER   +0.00
+
+Breakdown — split, 2 group(s)
+  group            n   WER A   WER B   CER A  CER B   SER A   SER B
+  train            2  37.50%  20.00%  15.79%  4.44%  50.00%  50.00%
+  test             1   0.00%   0.00%   0.00%  0.00%   0.00%   0.00%
+  macro mean       —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro sd         —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro median     —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  groups excluded  —       0       0       0      0       0       0
+
+Breakdown — session, 2 group(s)
+  group               n   WER A   WER B   CER A  CER B   SER A   SER B
+  2026-07-21-quiet    2  37.50%  20.00%  15.79%  4.44%  50.00%  50.00%
+  2026-07-22-kitchen  1   0.00%   0.00%   0.00%  0.00%   0.00%   0.00%
+  macro mean          —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro sd            —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro median        —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  groups excluded     —       0       0       0      0       0       0
+
+Breakdown — prompt, 3 group(s)
+  group                 n   WER A   WER B   CER A  CER B    SER A    SER B
+  prm_11aa22bb33cc44dd  1   0.00%   0.00%   0.00%  0.00%    0.00%    0.00%
+  prm_22bb33cc44dd55ee  1  75.00%  33.33%  31.58%  7.69%  100.00%  100.00%
+  prm_33cc44dd55ee66ff  1   0.00%   0.00%   0.00%  0.00%    0.00%    0.00%
+  macro mean            —  25.00%  11.11%  10.53%  2.56%   33.33%   33.33%
+  macro sd              —  35.36%  15.71%  14.89%  3.63%   47.14%   47.14%
+  macro median          —   0.00%   0.00%   0.00%  0.00%    0.00%    0.00%
+  groups excluded       —       0       0       0      0        0        0
+
+Breakdown — device, 2 group(s)
+  group            n   WER A   WER B   CER A  CER B   SER A   SER B
+  iphone-15        2  37.50%  20.00%  15.79%  4.44%  50.00%  50.00%
+  macbook-air      1   0.00%   0.00%   0.00%  0.00%   0.00%   0.00%
+  macro mean       —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro sd         —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro median     —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  groups excluded  —       0       0       0      0       0       0
+
+Breakdown — environment, 2 group(s)
+  group            n   WER A   WER B   CER A  CER B   SER A   SER B
+  kitchen          1   0.00%   0.00%   0.00%  0.00%   0.00%   0.00%
+  quiet-room       2  37.50%  20.00%  15.79%  4.44%  50.00%  50.00%
+  macro mean       —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro sd         —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  macro median     —  18.75%  10.00%   7.89%  2.22%  25.00%  25.00%
+  groups excluded  —       0       0       0      0       0       0
+
+Worklist — 1 of 3 scored Sample(s) erred under sdw-tier-a/1, worst first; 2 clean, counted not listed
+  rec_22bb33cc44dd55ee  WER 75.00% · CER 31.58% · words S=2 D=0 I=1 N=4 · chars S=0 D=0 I=6 N=19
+    ref                 dont stop mr obrien
+    hyp                 do not stop mister obrien

@@ -158,6 +158,34 @@ def test_the_json_rendering_is_one_document_with_a_fixed_key_order(
     ]
 
 
+@pytest.mark.parametrize("fixture", sorted(path.name for path in RUNS.iterdir() if path.is_dir()))
+def test_sdw_never_prints_the_word_baseline(
+    capsys: pytest.CaptureFixture[str], fixture: str
+) -> None:
+    # `score` reads a Record and cannot know whether the weights behind it were unmodified, so
+    # asserting the label would be a verdict on evidence it does not have. Baseline is a reading an
+    # operator applies to a Report; every fact needed to apply it is unconditionally in the header
+    # (ADR-0015/ADR-0022). Case-insensitive: the ban is on the word, not on one capitalisation.
+    digest = _digest(capsys, RUNS / fixture)
+    document = _score(capsys, "--run", str(RUNS / fixture), "--format", "json")
+
+    assert "baseline" not in digest.lower()
+    assert "baseline" not in document.lower()
+
+
+def test_score_observes_no_timing_of_its_own(capsys: pytest.CaptureFixture[str]) -> None:
+    # ADR-0012 let v0.1 print run duration *on stdout* precisely because stdout was not a compared
+    # artifact. Under ADR-0021 stdout **is** the artifact, so the permission does not transfer: the
+    # Report may quote any fact the Run recorded and may not observe one of its own (ADR-0024).
+    digest = _digest(capsys, CLEAN)
+
+    for observed in ("elapsed", "duration", "took", " ms", " seconds", "wall"):
+        assert observed not in digest.lower()
+    # The Run's own `timing` block is a quotable fact, but the digest omits it as ADR-0020's
+    # *never relevant* tier; the JSON echo carries it (ADR-0024).
+    assert "2026-08-03T14:07:48Z" not in digest
+
+
 def test_the_default_format_is_text(capsys: pytest.CaptureFixture[str]) -> None:
     assert _digest(capsys, CLEAN) == _digest(capsys, CLEAN, "--format", "text")
 
@@ -171,12 +199,23 @@ def test_score_writes_nothing_anywhere(
     # be stated without a "did someone score into this?" caveat.
     directory = tmp_path / "run"
     shutil.copytree(CLEAN, directory)
-    before = {path.name: path.read_bytes() for path in sorted(directory.iterdir())}
+
+    def content() -> dict[str, bytes]:
+        # Recursive, and files only: the fixture carries its `golden/` beside the Run's two files,
+        # and a Report written into a subdirectory would be as much a write as one written beside
+        # them.
+        return {
+            str(path.relative_to(directory)): path.read_bytes()
+            for path in sorted(directory.rglob("*"))
+            if path.is_file()
+        }
+
+    before = content()
 
     assert main(["score", "--run", str(directory), "--format", fmt]) == 0
     capsys.readouterr()
 
-    assert {path.name: path.read_bytes() for path in sorted(directory.iterdir())} == before
+    assert content() == before
 
 
 def test_the_report_is_byte_identical_across_invocations(

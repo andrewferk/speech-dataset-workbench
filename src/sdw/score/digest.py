@@ -7,31 +7,101 @@ because the goldens diff a captured stream).
 
 The header is five items in a fixed order — Scope, N of M, the Reference, the comparability rule,
 attribution — followed by the Run's Transcription provenance under ADR-0020's tier names (ADR-0024).
+Below it, in ADR-0022's order: the Tier A headline, the six-number table, the Tier B − Tier A delta,
+the five Breakdowns, the worklist.
+
+Rates render as percentages here and as dimensionless rates in the JSON document (ADR-0022), with
+fixed decimal places rather than `round`, which leaves a ragged column (v0.1's `_evidence`).
 """
 
 from __future__ import annotations
 
 import json
 import textwrap
-from collections.abc import Mapping, Sequence
-from typing import Any
+from collections.abc import Callable, Mapping, Sequence
+from typing import Any, NamedTuple
 
+from sdw.score.aggregate import (
+    TIERS,
+    Aggregation,
+    Breakdown,
+    Group,
+    Macro,
+    MacroStatistic,
+    Pooled,
+    ScoredSample,
+)
+from sdw.score.alignment import Alignment
+from sdw.score.metrics import SampleMetrics
 from sdw.score.report import COMPARABILITY_NOTE, REFERENCE_NOTE, Report, normalizers
+from sdw.score.text_normalization import TIER_A, TIER_B
 
 # Wrapped at a fixed width rather than at the terminal's: the digest is a compared artifact, so its
 # bytes may not depend on where it was printed (ADR-0022). Wide enough to hold the model row — the
 # tier-1 fact a reader compares first — on one line.
 WIDTH = 100
 
-# A fact `run.json` does not carry. The row still prints — the shape is fixed.
+# One spelling of *no number here* — a fact `run.json` does not carry, or a rate ADR-0018 leaves
+# undefined. Never an empty normalized text, which is a fact rather than an absence: see
+# :func:`_text`.
 ABSENT = "—"
 
+# ADR-0007's `RATIO_DP`, reimplemented rather than imported for ADR-0017's reason: the eval path is
+# a stranger consumer, and `sdw.quality` is build-path. A percentage is that rounded rate shifted by
+# the same two places, not a second precision decision (ADR-0022).
+RATIO_DP = 4
+PERCENT_DP = RATIO_DP - 2
+
 _SEPARATOR = " · "
+
+# An empty normalized text — the model said nothing, or a tier deleted everything it said.
+EMPTY = '""'
+
+
+class _Metric(NamedTuple):
+    """One Metric's label, and how to read it off a Pooled and off a Macro.
+
+    Accessors, not attribute names: a renamed field is a type error rather than an `ABSENT` cell.
+    """
+
+    label: str
+    pooled: Callable[[Pooled], float | None]
+    macro: Callable[[Macro], MacroStatistic]
+
+
+# In the order every level of the Report states them (ADR-0018).
+_METRICS = (
+    _Metric("WER", lambda pooled: pooled.word_error_rate, lambda macro: macro.word_error_rate),
+    _Metric(
+        "CER",
+        lambda pooled: pooled.character_error_rate,
+        lambda macro: macro.character_error_rate,
+    ),
+    _Metric(
+        "SER", lambda pooled: pooled.sentence_error_rate, lambda macro: macro.sentence_error_rate
+    ),
+)
+
+# The tiers as the tables column them, zipped onto :data:`~sdw.score.aggregate.TIERS` rather than
+# re-listed: `strict` makes a third Normalizer a loud failure here instead of a dropped column.
+_TIERS: tuple[tuple[str, str], ...] = tuple(zip(("A", "B"), TIERS, strict=True))
 
 
 def render(report: Report) -> str:
     """The whole digest as one string, LF-terminated."""
-    return "\n".join([*_header(report), "", *_provenance(report.provenance)]) + "\n"
+    sections: list[list[str]] = [
+        _header(report),
+        _provenance(report.provenance),
+        _headline(report),
+        _table(report.aggregation),
+        _delta(report.aggregation),
+        *[_breakdown(breakdown) for breakdown in report.aggregation.breakdowns],
+        _worklist(report),
+    ]
+    # One blank line between sections, none inside one: a section is the unit a reader scans to,
+    # and every one of them prints at every value, so the blank lines are structure rather than
+    # spacing (ADR-0022's fixed shape).
+    return "\n\n".join("\n".join(section) for section in sections) + "\n"
 
 
 def _header(report: Report) -> list[str]:
@@ -96,6 +166,203 @@ def _provenance(provenance: Mapping[str, Any]) -> list[str]:
         lines.append(heading)
         lines += _wrapped(rows, indent="  ", label_width=width)
     return lines
+
+
+def _headline(report: Report) -> list[str]:
+    """The Tier A Pooled WER, once, with its Scope attached (ADR-0018/ADR-0022)."""
+    pooled = report.aggregation.pooled[TIER_A]
+    return _wrapped(
+        [
+            (
+                "Headline",
+                f"Tier A Pooled WER {_percent(pooled.word_error_rate)} over "
+                f"{report.aggregation.samples} scored Sample(s), Scope {report.scope_label}",
+            )
+        ],
+        indent="",
+        label_width=len("Headline"),
+    )
+
+
+def _table(aggregation: Aggregation) -> list[str]:
+    """The six numbers — three Metrics × two tiers — Pooled over the whole Scope (ADR-0018)."""
+    rows = [("Metric", *(f"Tier {label}" for label, _ in _TIERS))]
+    rows += [
+        (metric.label, *(_percent(metric.pooled(aggregation.pooled[tier])) for _, tier in _TIERS))
+        for metric in _METRICS
+    ]
+    return ["Pooled over the Scope", *_columns(rows, indent="  ")]
+
+
+def _delta(aggregation: Aggregation) -> list[str]:
+    """Tier B − Tier A in percentage points, named a **delta** and never a "deviation"
+    (ADR-0018)."""
+    rows = [
+        (
+            metric.label,
+            _points(
+                metric.pooled(aggregation.pooled[TIER_B]),
+                metric.pooled(aggregation.pooled[TIER_A]),
+            ),
+        )
+        for metric in _METRICS
+    ]
+    return [
+        f"Tier B − Tier A delta, in percentage points ({TIER_B} − {TIER_A})",
+        *_columns(rows, indent="  "),
+    ]
+
+
+def _breakdown(breakdown: Breakdown) -> list[str]:
+    """One axis: every group with its `n`, then the Macro across them (ADR-0018/ADR-0022).
+
+    Nothing is suppressed and no threshold exists: `n` prints beside every rate, and an undefined
+    group rate prints :data:`ABSENT` rather than vanishing.
+    """
+    heading = f"Breakdown — {breakdown.attribute}, {len(breakdown.groups)} group(s)"
+    rows = [("group", "n", *_cells(lambda metric, label, _: f"{metric.label} {label}"))]
+    rows += [_group_row(group) for group in breakdown.groups]
+    rows += _macro_rows(breakdown)
+    return [heading, *_columns(rows, indent="  ")]
+
+
+def _group_row(group: Group) -> tuple[str, ...]:
+    """One group: its attribute value, its `n`, and its Pooled rate per Metric per tier."""
+    return (
+        group.value,
+        str(group.samples),
+        *_cells(lambda metric, _, tier: _percent(metric.pooled(group.pooled[tier]))),
+    )
+
+
+def _macro_rows(breakdown: Breakdown) -> list[tuple[str, ...]]:
+    """Mean, SD and median across the groups, and the per-Metric exclusion counts (ADR-0018)."""
+    statistics: tuple[tuple[str, Callable[[MacroStatistic], str]], ...] = (
+        ("macro mean", lambda statistic: _percent(statistic.mean)),
+        ("macro sd", lambda statistic: _percent(statistic.standard_deviation)),
+        ("macro median", lambda statistic: _percent(statistic.median)),
+        # `n` is the group count, so the exclusions are stated in groups, not Samples.
+        ("groups excluded", lambda statistic: str(statistic.excluded_groups)),
+    )
+    return [_statistic_row(breakdown, label, cell) for label, cell in statistics]
+
+
+def _statistic_row(
+    breakdown: Breakdown, label: str, cell: Callable[[MacroStatistic], str]
+) -> tuple[str, ...]:
+    """One Macro row; the `n` column is :data:`ABSENT` because a statistic has no group count."""
+    return (
+        label,
+        ABSENT,
+        *_cells(lambda metric, _, tier: cell(metric.macro(breakdown.macro[tier]))),
+    )
+
+
+def _worklist(report: Report) -> list[str]:
+    """Every Sample with any Tier A error, worst-first, ties by `id`; clean ones counted, not
+    listed (ADR-0022).
+
+    There is no top-N: introducing one would need a constant nothing here can supply.
+    """
+    erred = sorted(
+        (sample for sample in report.samples if _erred(sample.metrics[TIER_A])), key=_worst_first
+    )
+    clean = len(report.samples) - len(erred)
+    lines = [
+        f"Worklist — {len(erred)} of {len(report.samples)} scored Sample(s) erred under "
+        f"{TIER_A}, worst first; {clean} clean, counted not listed"
+    ]
+    for sample in erred:
+        metrics = sample.metrics[TIER_A]
+        lines += _wrapped(
+            [
+                (
+                    sample.id,
+                    f"WER {_percent(metrics.word_error_rate)}{_SEPARATOR}"
+                    f"CER {_percent(metrics.character_error_rate)}{_SEPARATOR}"
+                    f"words {_counts(metrics.words)}{_SEPARATOR}"
+                    f"chars {_counts(metrics.characters)}",
+                ),
+                # The normalized pair, which exists in no other artifact and is what the manual
+                # gate reads to tell recognition error from speaker deviation (ADR-0026).
+                ("  ref", _text(metrics.reference)),
+                ("  hyp", _text(metrics.hypothesis)),
+            ],
+            indent="  ",
+            label_width=max(len(sample.id), len("  ref")),
+        )
+    return lines
+
+
+def _cells(cell: Callable[[_Metric, str, str], str]) -> tuple[str, ...]:
+    """One cell per Metric × tier, in the order every table columns them."""
+    # The single walk: a heading and a row that disagreed about column order would file numbers
+    # under a header that still read correctly.
+    return tuple(cell(metric, label, tier) for metric in _METRICS for label, tier in _TIERS)
+
+
+def _erred(metrics: SampleMetrics) -> bool:
+    """Any error at all under this tier — word, character, or the sentence-level binary."""
+    return bool(metrics.words.errors or metrics.characters.errors or metrics.sentence_error)
+
+
+def _worst_first(sample: ScoredSample) -> tuple[int, float, str]:
+    """Tier A WER descending, ties by `id` ascending; an undefined WER sorts last (ADR-0022)."""
+    rate = sample.metrics[TIER_A].word_error_rate
+    if rate is None:
+        return (1, 0.0, sample.id)
+    return (0, -rate, sample.id)
+
+
+def _counts(alignment: Alignment) -> str:
+    """``S=1 D=0 I=0 N=4`` — the integer evidence behind a rate (ADR-0018)."""
+    return (
+        f"S={alignment.substitutions} D={alignment.deletions} "
+        f"I={alignment.insertions} N={alignment.reference_length}"
+    )
+
+
+def _text(text: str) -> str:
+    """A normalized text, or :data:`EMPTY` — a tier producing `""` is a fact, not an absence."""
+    return text or EMPTY
+
+
+def _percent(rate: float | None) -> str:
+    """``8.33%``, or :data:`ABSENT` for a rate ADR-0018 leaves undefined — never `0.00%`."""
+    # Rounded at RATIO_DP before the shift: rounding the raw float instead is a second rounding,
+    # and the JSON document would then print a different number for the same rate (ADR-0022).
+    if rate is None:
+        return ABSENT
+    return f"{round(rate, RATIO_DP) * 100:.{PERCENT_DP}f}%"
+
+
+def _points(tier_b: float | None, tier_a: float | None) -> str:
+    """Tier B − Tier A in percentage points, or :data:`ABSENT` if either side is undefined."""
+    # The parameter order is the subtraction's direction (ADR-0018): reversing it flips every sign.
+    # Subtracted after rounding: the delta must be the difference of the two numbers printed above
+    # it, not a third one derived from the floats behind them (ADR-0018).
+    if tier_b is None or tier_a is None:
+        return ABSENT
+    difference = round(tier_b, RATIO_DP) - round(tier_a, RATIO_DP)
+    return f"{difference * 100:+.{PERCENT_DP}f}"
+
+
+def _columns(rows: Sequence[Sequence[str]], *, indent: str) -> list[str]:
+    """A table: first column left-aligned, every other right-aligned, widths from the content.
+
+    Every row must be the same length; a ragged one raises rather than misaligning.
+    """
+    widths = [max(len(row[index]) for row in rows) for index in range(len(rows[0]))]
+    return [
+        (
+            indent
+            + "  ".join(
+                cell.ljust(width) if index == 0 else cell.rjust(width)
+                for index, (cell, width) in enumerate(zip(row, widths, strict=True))
+            )
+        ).rstrip()
+        for row in rows
+    ]
 
 
 def _wrapped(items: Sequence[tuple[str, str]], *, indent: str, label_width: int) -> list[str]:

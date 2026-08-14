@@ -15,7 +15,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from sdw import __version__
-from sdw.score.run import SPLIT_ORDER, Run
+from sdw.errors import HardError
+from sdw.score.aggregate import Aggregation, ScoredSample, aggregate, scored
+from sdw.score.run import SPLIT_ORDER, Run, Sample
 from sdw.score.text_normalization import TIER_A, TIER_B
 
 # ADR-0022 header item 3: the map's named ceiling, stated as a property of the measurement.
@@ -45,6 +47,10 @@ class Report:
     long_form: int
     provenance: dict[str, Any]
     tool_version: str
+    # Record order — `id`-ascending (ADR-0019) — so a rendering that wants another order sorts for
+    # itself and says why, rather than inheriting one nobody chose. The worklist does (ADR-0022).
+    samples: tuple[ScoredSample, ...]
+    aggregation: Aggregation
 
     @property
     def scope_label(self) -> str:
@@ -62,9 +68,20 @@ def assemble(run: Run, *, split: str | None) -> Report:
     """Build the Report for ``run`` under the Evaluation Scope ``split`` (``None`` = every Split).
 
     Narrowing at Scoring is free, which is why it happens here and nowhere upstream (ADR-0017).
+
+    Raises :class:`~sdw.errors.HardError` for an empty Scope, and — through
+    :func:`~sdw.score.aggregate.aggregate` — for a Scope with no Reference tokens under Tier A.
     """
     in_scope = [sample for sample in run.record if split is None or sample.split == split]
+    if not in_scope:
+        raise HardError(_empty_scope(run, split))
     failed = [sample for sample in in_scope if sample.failed]
+    # The Hypothesis is narrowed at the call site rather than inside `_score`: a failed Sample has
+    # no pair to align, and widening the scorer to accept the absent one would score a crash as an
+    # empty Hypothesis (ADR-0018).
+    samples = tuple(
+        _score(sample, sample.hypothesis) for sample in in_scope if sample.hypothesis is not None
+    )
     return Report(
         splits=_splits_present(run),
         selected_split=split,
@@ -76,7 +93,33 @@ def assemble(run: Run, *, split: str | None) -> Report:
         long_form=sum(1 for sample in in_scope if sample.long_form),
         provenance=dict(run.provenance),
         tool_version=__version__,
+        samples=samples,
+        aggregation=aggregate(samples),
     )
+
+
+def _score(sample: Sample, hypothesis: str) -> ScoredSample:
+    """One Record line's Metrics under both tiers, beside the attributes the Breakdowns group by."""
+    return scored(
+        id=sample.id,
+        reference=sample.reference,
+        hypothesis=hypothesis,
+        split=sample.split,
+        session_id=sample.session_id,
+        prompt_id=sample.prompt_id,
+        device=sample.device,
+        environment=sample.environment,
+    )
+
+
+def _empty_scope(run: Run, split: str | None) -> str:
+    """Why the Scope came out empty — the `--split` typo, or a Record with no lines (ADR-0025)."""
+    if split is not None:
+        return (
+            f"--split {split} selects no Samples: the Record holds "
+            f"{len(run.record)} line(s), none of them in that Split"
+        )
+    return "the Hypothesis Record holds no Samples, so there is nothing to score"
 
 
 def _splits_present(run: Run) -> tuple[str, ...]:

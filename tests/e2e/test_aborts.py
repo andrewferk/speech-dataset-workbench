@@ -17,6 +17,7 @@ split ratio (both a wrong sum and a non-positive ratio, the two ADR-0004 rejects
 
 from __future__ import annotations
 
+import json
 import shutil
 from collections.abc import Callable
 from pathlib import Path
@@ -153,28 +154,56 @@ def test_the_abort_names_its_cause_on_stderr(
 
 RUNS = Path(__file__).parents[1] / "fixtures" / "runs"
 
-# A `break` here mutates a copied Run directory in place.
-BreakRun = Callable[[Path], None]
+# A `break` here mutates a copied Run directory in place and returns any extra argv it needs — the
+# same shape the build rows use for the two config-driven cases.
+BreakRun = Callable[[Path], list[str]]
 
 
-def _no_sentinel(run_dir: Path) -> None:
+def _no_sentinel(run_dir: Path) -> list[str]:
     # A Run that crashed before `run.json` landed. ADR-0017 writes provenance last precisely so this
     # state is distinguishable, and ADR-0021 then decided such Runs accumulate on disk forever —
     # so refusing them by name is the only thing standing between a crash and a Report over a
     # partial Record.
     (run_dir / "run.json").unlink()
+    return []
 
 
-def _truncated_record(run_dir: Path) -> None:
+def _truncated_record(run_dir: Path) -> list[str]:
     # A Record truncated after the Run finished (ADR-0019).
     record = run_dir / "hypotheses.jsonl"
     kept = record.read_text(encoding="utf-8").splitlines(keepends=True)[:-1]
     record.write_text("".join(kept), encoding="utf-8")
+    return []
+
+
+def _split_selects_no_samples(run_dir: Path) -> list[str]:
+    # The Run is untouched and the *invocation* is what selects nothing. A Report over no Samples
+    # states nothing, and a `--split` that quietly matched nothing is how an operator ends up
+    # comparing two Reports over different Scopes without noticing (ADR-0017/ADR-0025).
+    return ["--split", "dev"]
+
+
+def _no_reference_tokens(run_dir: Path) -> list[str]:
+    # Every Reference emptied, so the Scope's Tier A denominator is zero. ADR-0018 refuses the
+    # Report rather than printing a rate with no denominator — a *group* in that state is emitted
+    # with `null` instead, which is the Breakdown's business and not this table's.
+    record = run_dir / "hypotheses.jsonl"
+    lines = record.read_text(encoding="utf-8").splitlines()
+    record.write_text(
+        "".join(
+            json.dumps({**json.loads(line), "reference": ""}, ensure_ascii=False) + "\n"
+            for line in lines
+        ),
+        encoding="utf-8",
+    )
+    return []
 
 
 SCORE_ABORT_CASES = [
     pytest.param(_no_sentinel, "incomplete Run", id="no-run-json"),
     pytest.param(_truncated_record, "truncated Hypothesis Record", id="truncated-record"),
+    pytest.param(_split_selects_no_samples, "--split dev selects no Samples", id="empty-scope"),
+    pytest.param(_no_reference_tokens, "zero total Reference tokens", id="no-reference-tokens"),
 ]
 
 
@@ -187,9 +216,9 @@ def test_score_aborts_and_names_its_cause(
 ) -> None:
     run_dir = tmp_path / "run-20260803T142205Z"
     shutil.copytree(RUNS / "clean", run_dir)
-    break_run(run_dir)
+    extra = break_run(run_dir)
 
-    exit_code = main(["score", "--run", str(run_dir)])
+    exit_code = main(["score", "--run", str(run_dir), *extra])
 
     assert exit_code != 0
     captured = capsys.readouterr()
