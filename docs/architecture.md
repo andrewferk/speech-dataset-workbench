@@ -127,8 +127,10 @@ One line per module. Mechanism is in the docstring; the choices behind it are in
 `sdw.provenance` at any depth: each parses the emitted JSONL as a stranger would, so an
 under-specified format is caught by the code reading it rather than papered over by a shared
 constant. `sdw.serialization` is the one permitted crossing, because two spellings of the same JSON
-is the drift that would replace. Scoring additionally imports nothing from Transcription, which is
-what lets `score` run in a venv that never installed the `asr` extra
+is the drift that would replace. Within Transcription, exactly one leaf module imports the `asr`
+extra and the dispatch branch constructs the model there, so every other module under
+`sdw/transcribe/` stays importable with no extra installed. Scoring additionally imports nothing
+from Transcription, which is what lets `score` run in a venv that never installed the `asr` extra
 ([ADR-0023](adr/0023-packaging-optional-dependencies-and-the-import-boundary.md),
 [ADR-0019](adr/0019-hypothesis-record-format.md)).
 
@@ -139,6 +141,7 @@ what lets `score` run in a venv that never installed the `asr` extra
 | `transcribe/dataset.py` | Reads a built Dataset Version as a stranger — canonical JSONL, never the HF view ([ADR-0017](adr/0017-evaluation-command-surface.md)). |
 | `transcribe/audio.py` | A Sample's Normalized audio, as the array the model is handed ([ADR-0016](adr/0016-asr-backend-model-selection-and-pinning.md)). |
 | `transcribe/backend.py` | The model seam: what Transcription calls, and what it quotes into `run.json` ([ADR-0025](adr/0025-testing-strategy-for-v0-2.md)). |
+| `transcribe/whisper.py` | The pinned checkpoint, and the only module here that imports the `asr` extra ([ADR-0016](adr/0016-asr-backend-model-selection-and-pinning.md)). |
 | `transcribe/record.py` | `hypotheses.jsonl`, appended and flushed as Transcription proceeds ([ADR-0019](adr/0019-hypothesis-record-format.md)). |
 | `transcribe/provenance.py` | `run.json`, written last as the completeness sentinel ([ADR-0020](adr/0020-evaluation-run-provenance-record.md)). |
 | `score/command.py` | The `score` body: read a Run, print one rendering of the Report ([ADR-0021](adr/0021-evaluation-output-layout-and-run-retention.md)). |

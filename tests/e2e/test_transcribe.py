@@ -29,6 +29,7 @@ import numpy.typing as npt
 import pytest
 
 from sdw.cli import main
+from sdw.errors import HardError
 from sdw.transcribe import pipeline, provenance, record
 from sdw.transcribe.backend import BackendProvenance, Language
 from tests import synth
@@ -323,6 +324,39 @@ class TestLongForm:
 
         assert json.loads(_record_lines(run_dir)[0])["long_form"] is True
         assert "long-form" in capsys.readouterr().err
+
+
+class TestWeightResolution:
+    """Resolving the weights is the second preflight phase, above the `mkdir` (#166, ADR-0016).
+
+    The real thing this stands in for is ADR-0016's third network state — no network and no cache —
+    which no test can reach, because no test may download weights (ADR-0025). What is testable is
+    the property that state relies on: a backend that refuses to load aborts the Run *before* the
+    Run directory exists, so the operator never gets a Report over a model that failed to load.
+    """
+
+    def test_unresolvable_weights_leave_no_run_directory(self, tmp_path: Path) -> None:
+        dataset = _built(tmp_path)
+        eval_out = tmp_path / "eval"
+
+        def _unresolvable() -> FakeBackend:
+            raise HardError("the pinned weights are neither cached nor reachable")
+
+        with pytest.raises(HardError, match="neither cached nor reachable"):
+            pipeline.run(dataset=dataset, eval_out=eval_out, load_backend=_unresolvable)
+
+        assert not eval_out.exists()
+
+    def test_a_broken_dataset_is_reported_without_loading_anything(self, tmp_path: Path) -> None:
+        # The other half of the ordering: the structural preflight runs first, so a dataset knowably
+        # broken in seconds never costs the model load (ADR-0017).
+        def _never_called() -> FakeBackend:
+            raise AssertionError("the model loaded before the structural preflight finished")
+
+        with pytest.raises(HardError, match="not a Dataset Version"):
+            pipeline.run(
+                dataset=tmp_path / "absent", eval_out=tmp_path / "eval", load_backend=_never_called
+            )
 
 
 class TestCrash:
